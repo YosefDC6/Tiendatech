@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Mis datos · TiendaTech</title>
+<link rel="stylesheet" href="/css/style.css" />
+</head>
+<body>
+<div id="navbar-placeholder"></div>
+
+<div class="cuenta-shell">
+    <nav class="cuenta-nav" id="cuenta-nav"></nav>
+    <main class="cuenta-panel" id="cuenta-panel"><div class="empty-state">Cargando…</div></main>
+</div>
+
+<div id="footer-placeholder"></div>
+
+<script src="/js/theme.js"></script>
+<script src="/js/api.js"></script>
+<script src="/js/icons.js"></script>
+<script src="/js/toast.js"></script>
+<script src="/js/layout.js"></script>
+<script src="/js/chatbot.js"></script>
+<script src="/js/cuenta.js"></script>
+<script>
+let CID = null;
+
+montarCuenta('datos', async (panel, P) => {
+    CID = P.id;
+    panel.innerHTML = `
+        <div class="cuenta-head"><h1>Mis datos</h1><p>Tu información de contacto y facturación.</p></div>
+        <div class="card" style="max-width:580px">
+            <div class="field"><label>Nombre completo</label><input id="p-nombre" value="${P.nombre || ''}" /></div>
+            <div class="field"><label>Correo (no editable)</label><input value="${P.correo}" disabled /></div>
+            <div class="field-row">
+                <div class="field"><label>Teléfono</label><input id="p-tel" value="${P.telefono || ''}" /></div>
+                <div class="field"><label>Empresa</label><input id="p-empresa" value="${P.empresa || ''}" /></div>
+            </div>
+            <div class="field-row">
+                <div class="field"><label>Ciudad</label><input id="p-ciudad" value="${P.ciudad || ''}" /></div>
+                <div class="field"><label>Estado</label><input id="p-estado" value="${P.estado || ''}" /></div>
+            </div>
+            <div class="field"><label>Código postal</label><input id="p-cp" value="${P.codigo_postal || ''}" /></div>
+            <button class="btn btn-primary" onclick="guardarDatos()">Guardar cambios</button>
+        </div>`;
+});
+
+async function guardarDatos() {
+    const body = {
+        nombre: val('p-nombre'), telefono: val('p-tel'), empresa: val('p-empresa'),
+        ciudad: val('p-ciudad'), estado: val('p-estado'), codigo_postal: val('p-cp'),
+    };
+    if (!body.nombre) { toast('El nombre no puede quedar vacío', 'warn'); return; }
+    try {
+        const r = await api(`/clientes/${CID}`, { method: 'PUT', body });
+        Sesion.guardarCliente({ ...Sesion.cliente(), ...r.cliente }, localStorage.getItem('tt_token'));
+        document.getElementById('cn-nombre').textContent = r.cliente.nombre;
+        toast('Datos actualizados', 'ok');
+    } catch (e) { toast(e.message, 'error'); }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Detalle de cliente · Admin TiendaTech</title>
+<link rel="stylesheet" href="/css/style.css" />
+</head>
+<body class="theme-light">
+<div class="admin-shell">
+    <aside class="admin-sidebar" id="admin-sidebar-placeholder"></aside>
+    <main class="admin-main" id="main"><p>Cargando…</p></main>
+</div>
+
+<div class="modal-overlay" id="modal"><div class="modal" id="modal-body"></div></div>
+
+<script src="/js/theme.js"></script>
+<script src="/js/api.js"></script>
+<script src="/js/icons.js"></script>
+<script src="/js/toast.js"></script>
+<script src="/admin/js/admin-layout.js"></script>
+<script>
+requireAuthAdmin();
+renderAdminSidebar('clientes');
+
+const params = new URLSearchParams(location.search);
+const ID = params.get('id');
+const TAB = params.get('tab') || 'info';
+const ETAPAS = ['Prospecto', 'Activo', 'Frecuente', 'Inactivo'];
+const TIPO_ICO = { llamada: 'help', correo: 'chat', reunion: 'user', chat: 'chat', soporte: 'shield' };
+let C = null;
+
+if (!ID) location.href = '/admin/clientes.html';
+
+async function cargar() {
+    C = await api(`/admin/clientes/${ID}`);
+    const main = document.getElementById('main');
+    const m = C.metricas || {};
+    main.innerHTML = `
+        <a href="/admin/clientes.html" style="font-size:.85rem">← Volver a clientes</a>
+        <div class="crm-perfil" style="margin-top:10px">
+            <span class="crm-avatar">${(C.nombre[0] || 'C').toUpperCase()}</span>
+            <div>
+                <h2 style="margin:0">${C.nombre}
+                    <span class="tag tag-etapa-${C.etapa_crm}">${C.etapa_crm}</span>
+                    <span class="tag">${C.estado_cliente}</span>
+                </h2>
+                <p style="margin:2px 0 0">${C.correo}${C.empresa ? ' · ' + C.empresa : ''}</p>
+            </div>
+        </div>
+
+        <div class="at-actions" style="margin-bottom:18px">
+            <button class="btn btn-outline btn-sm" onclick="editar()">Editar cliente</button>
+            <button class="btn btn-outline btn-sm" onclick="cambiarEtapa()">Cambiar etapa</button>
+            <button class="btn btn-primary btn-sm" onclick="nuevaInteraccion()">Nueva interacción</button>
+        </div>
+
+        <div class="stat-grid" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr))">
+            <div class="stat-card"><div class="stat-label">Compras</div><div class="stat-value">${m.total_compras || 0}</div></div>
+            <div class="stat-card"><div class="stat-label">Valor total</div><div class="stat-value" style="font-size:1.3rem">${formatoMoneda(m.valor_total_compras || 0)}</div></div>
+            <div class="stat-card"><div class="stat-label">Interacciones</div><div class="stat-value">${m.total_interacciones || 0}</div></div>
+            <div class="stat-card"><div class="stat-label">Club</div><div class="stat-value" style="font-size:1.1rem">${C.nivel.nombre}</div><div class="stat-sub">${C.puntos} pts</div></div>
+        </div>
+
+        <nav class="crm-tabs">
+            <a href="?id=${ID}&tab=info" class="${TAB === 'info' ? 'active' : ''}">Información</a>
+            <a href="?id=${ID}&tab=interacciones" class="${TAB === 'interacciones' ? 'active' : ''}">Interacciones (${m.total_interacciones || 0})</a>
+            <a href="?id=${ID}&tab=evaluaciones" class="${TAB === 'evaluaciones' ? 'active' : ''}">Evaluaciones (${C.resumen.resenas})</a>
+        </nav>
+        <div id="tab-body"><p>Cargando…</p></div>
+    `;
+    if (TAB === 'info') tabInfo();
+    else if (TAB === 'interacciones') tabInteracciones();
+    else tabEvaluaciones();
+}
+
+function tabInfo() {
+    const b = document.getElementById('tab-body');
+    b.innerHTML = `
+        <div class="card">
+            <div class="crm-datos">
+                <div class="cd-item"><span>Teléfono</span><strong>${C.telefono || '—'}</strong></div>
+                <div class="cd-item"><span>Empresa</span><strong>${C.empresa || '—'}</strong></div>
+                <div class="cd-item"><span>Ciudad</span><strong>${[C.ciudad, C.estado].filter(Boolean).join(', ') || '—'}</strong></div>
+                <div class="cd-item"><span>Registro</span><strong>${formatoFecha(C.fecha_registro)}</strong></div>
+                <div class="cd-item"><span>Último acceso</span><strong>${C.ultimo_login ? formatoFecha(C.ultimo_login) : 'Nunca'}</strong></div>
+                <div class="cd-item"><span>Etapa CRM</span><strong>${C.etapa_crm}</strong></div>
+                <div class="cd-item"><span>Estado</span><strong style="text-transform:capitalize">${C.estado_cliente}</strong></div>
+                <div class="cd-item"><span>Club de puntos</span><strong>${C.nivel.nombre} · ${C.puntos} pts</strong></div>
+            </div>
+        </div>`;
+}
+
+async function tabInteracciones() {
+    const b = document.getElementById('tab-body');
+    const list = await api(`/admin/clientes/${ID}/interacciones`);
+    b.innerHTML = `
+        <div class="card">
+            ${list.length === 0 ? '<p style="margin:0">Sin interacciones registradas.</p>' : `
+            <div class="crm-timeline">
+                ${list.map((i) => `
+                    <div class="crm-tl-item">
+                        <div class="crm-tl-ico">${icon(TIPO_ICO[i.tipo] || 'chat', 16)}</div>
+                        <div style="flex:1">
+                            <div class="tl-tipo">${i.tipo}</div>
+                            <div>${i.descripcion}</div>
+                            <div class="tl-meta">${formatoFecha(i.fecha)}${i.usuario_nombre ? ' · ' + i.usuario_nombre : ''}</div>
+                        </div>
+                    </div>`).join('')}
+            </div>`}
+        </div>`;
+}
+
+async function tabEvaluaciones() {
+    const b = document.getElementById('tab-body');
+    const list = await api(`/admin/clientes/${ID}/resenas`);
+    b.innerHTML = `
+        <div class="card">
+            ${list.length === 0 ? '<p style="margin:0">Este cliente no ha dejado reseñas.</p>' : `
+            <div class="table-wrap">
+                <table>
+                    <thead><tr><th>Producto</th><th>Calificación</th><th>Comentario</th><th>Fecha</th></tr></thead>
+                    <tbody>${list.map((r) => `
+                        <tr>
+                            <td>${r.producto_nombre}</td>
+                            <td class="mono">${r.calificacion} / 5</td>
+                            <td>${r.comentario || '—'}</td>
+                            <td>${formatoFecha(r.fecha)}</td>
+                        </tr>`).join('')}</tbody>
+                </table>
+            </div>`}
+        </div>`;
+}
+
+function abrirModal(html) {
+    document.getElementById('modal-body').innerHTML =
+        `<button class="modal-close" onclick="document.getElementById('modal').classList.remove('open')">${icon('x', 20)}</button>${html}`;
+    document.getElementById('modal').classList.add('open');
+}
+const cerrarModal = () => document.getElementById('modal').classList.remove('open');
+
+function editar() {
+    abrirModal(`
+        <h3>Editar cliente</h3>
+        <div class="field"><label>Nombre</label><input id="e-nombre" value="${C.nombre}" /></div>
+        <div class="field-row">
+            <div class="field"><label>Teléfono</label><input id="e-tel" value="${C.telefono || ''}" /></div>
+            <div class="field"><label>Empresa</label><input id="e-empresa" value="${C.empresa || ''}" /></div>
+        </div>
+        <div class="field-row">
+            <div class="field"><label>Ciudad</label><input id="e-ciudad" value="${C.ciudad || ''}" /></div>
+            <div class="field"><label>Estado</label><input id="e-estado" value="${C.estado || ''}" /></div>
+        </div>
+        <div class="field"><label>Estado del cliente</label>
+            <select id="e-activo">
+                <option value="activo" ${C.estado_cliente === 'activo' ? 'selected' : ''}>Activo</option>
+                <option value="inactivo" ${C.estado_cliente === 'inactivo' ? 'selected' : ''}>Inactivo</option>
+            </select>
+        </div>
+        <button class="btn btn-primary" style="width:100%" onclick="guardarEdicion()">Guardar</button>
+    `);
+}
+async function guardarEdicion() {
+    try {
+        await api(`/admin/clientes/${ID}`, { method: 'PUT', body: {
+            nombre: v('e-nombre'), telefono: v('e-tel'), empresa: v('e-empresa'),
+            ciudad: v('e-ciudad'), estado: v('e-estado'), estado_cliente: document.getElementById('e-activo').value,
+        }});
+        cerrarModal(); toast('Cliente actualizado', 'ok'); cargar();
+    } catch (e) { toast(e.message, 'error'); }
+}
+
+function cambiarEtapa() {
+    abrirModal(`
+        <h3>Cambiar etapa CRM</h3>
+        <p style="color:var(--text-muted);font-size:.85rem">Cambiar la etapa ayuda a dar seguimiento y priorizar a tus clientes.</p>
+        <div class="field"><label>Nueva etapa</label>
+            <select id="et-nueva">${ETAPAS.map((e) => `<option ${e === C.etapa_crm ? 'selected' : ''}>${e}</option>`).join('')}</select>
+        </div>
+        <button class="btn btn-primary" style="width:100%" onclick="guardarEtapa()">Guardar cambios</button>
+    `);
+}
+async function guardarEtapa() {
+    try {
+        await api(`/admin/clientes/${ID}/etapa`, { method: 'PUT', body: { etapa_crm: document.getElementById('et-nueva').value } });
+        cerrarModal(); toast('Etapa actualizada', 'ok'); cargar();
+    } catch (e) { toast(e.message, 'error'); }
+}
+
+function nuevaInteraccion() {
+    abrirModal(`
+        <h3>Registrar interacción</h3>
+        <div class="field"><label>Tipo</label>
+            <select id="ni-tipo">
+                <option value="llamada">Llamada</option><option value="correo">Correo</option>
+                <option value="reunion">Reunión</option><option value="soporte">Soporte</option>
+            </select>
+        </div>
+        <div class="field"><label>Descripción</label><textarea id="ni-desc" rows="3"></textarea></div>
+        <button class="btn btn-primary" style="width:100%" onclick="guardarInteraccion()">Guardar</button>
+    `);
+}
+async function guardarInteraccion() {
+    const descripcion = v('ni-desc');
+    if (!descripcion) { toast('Escribe una descripción', 'warn'); return; }
+    try {
+        await api(`/admin/clientes/${ID}/interacciones`, { method: 'POST', body: {
+            tipo: document.getElementById('ni-tipo').value, descripcion, usuario_id: Sesion.usuario().id,
+        }});
+        cerrarModal(); toast('Interacción registrada', 'ok');
+        location.href = `?id=${ID}&tab=interacciones`;
+    } catch (e) { toast(e.message, 'error'); }
+}
+
+const v = (id) => document.getElementById(id).value.trim();
+cargar();
+</script>
+</body>
+</html>

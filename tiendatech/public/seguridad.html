@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Seguridad · TiendaTech</title>
+<link rel="stylesheet" href="/css/style.css" />
+</head>
+<body>
+<div id="navbar-placeholder"></div>
+
+<div class="cuenta-shell">
+    <nav class="cuenta-nav" id="cuenta-nav"></nav>
+    <main class="cuenta-panel" id="cuenta-panel"><div class="empty-state">Cargando…</div></main>
+</div>
+
+<div id="footer-placeholder"></div>
+
+<script src="/js/theme.js"></script>
+<script src="/js/api.js"></script>
+<script src="/js/icons.js"></script>
+<script src="/js/toast.js"></script>
+<script src="/js/layout.js"></script>
+<script src="/js/chatbot.js"></script>
+<script src="/js/cuenta.js"></script>
+<script>
+let CID = null;
+
+montarCuenta('seguridad', async (panel, P) => {
+    CID = P.id;
+    panel.innerHTML = `
+        <div class="cuenta-head"><h1>Seguridad</h1><p>Cambia tu contraseña de acceso.</p></div>
+        <div class="card" style="max-width:440px">
+            <div class="field"><label>Contraseña actual</label><input type="password" id="s-actual" autocomplete="current-password" /></div>
+            <div class="field"><label>Nueva contraseña</label><input type="password" id="s-nueva" minlength="6" autocomplete="new-password" /></div>
+            <div class="field"><label>Repetir nueva contraseña</label><input type="password" id="s-rep" minlength="6" autocomplete="new-password" /></div>
+            <button class="btn btn-primary" onclick="cambiarPassword()">Actualizar contraseña</button>
+        </div>`;
+});
+
+async function cambiarPassword() {
+    const actual = val('s-actual'), nueva = val('s-nueva'), rep = val('s-rep');
+    if (nueva.length < 6) { toast('La nueva contraseña debe tener 6+ caracteres', 'warn'); return; }
+    if (nueva !== rep) { toast('Las contraseñas nuevas no coinciden', 'warn'); return; }
+    try {
+        await api(`/clientes/${CID}/password`, { method: 'PUT', body: { actual, nueva } });
+        toast('Contraseña actualizada', 'ok');
+        ['s-actual', 's-nueva', 's-rep'].forEach((i) => document.getElementById(i).value = '');
+    } catch (e) { toast(e.message, 'error'); }
+}
+</script>
+</body>
+</html>

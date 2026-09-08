@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Ayuda y soporte · TiendaTech</title>
+<link rel="stylesheet" href="/css/style.css" />
+</head>
+<body>
+<div id="navbar-placeholder"></div>
+
+<div class="container" style="padding-top:36px;padding-bottom:60px;max-width:900px">
+    <div class="page-hero">
+        <div class="hero-badge" data-ic="help" data-ic-size="28"></div>
+        <h1>Centro de ayuda</h1>
+        <p>Dudas sobre compras, envíos, garantía y tu cuenta. Si no encuentras la respuesta, escríbenos.</p>
+    </div>
+
+    <div class="help-cards">
+        <a class="card help-card" href="#envios"><span data-ic="truck"></span><strong>Envíos y entregas</strong><span class="hc-sub">Tiempos, cobertura y seguimiento.</span></a>
+        <a class="card help-card" href="#devoluciones"><span data-ic="undo"></span><strong>Devoluciones</strong><span class="hc-sub">Cómo devolver o cambiar un producto.</span></a>
+        <a class="card help-card" href="#garantia"><span data-ic="shield"></span><strong>Garantía</strong><span class="hc-sub">Cobertura y cómo hacerla válida.</span></a>
+        <a class="card help-card" href="#pagos"><span data-ic="card"></span><strong>Pagos y facturación</strong><span class="hc-sub">Métodos aceptados y facturas.</span></a>
+    </div>
+
+    <section id="envios" class="card" style="margin-bottom:14px">
+        <h3>Envíos y entregas</h3>
+        <p><strong>Tiempo estimado:</strong> 2 a 5 días hábiles según tu estado. Zonas metropolitanas 24–48 h.</p>
+        <p><strong>Costo:</strong> $199 estándar. <strong>Gratis</strong> en compras mayores a $10,000.</p>
+        <p><strong>Seguimiento:</strong> desde <a href="/pedidos.html">Mis pedidos</a> ves el estado de cada compra: confirmado, en preparación, enviado y entregado.</p>
+    </section>
+
+    <section id="devoluciones" class="card" style="margin-bottom:14px">
+        <h3>Devoluciones y cambios</h3>
+        <p>Tienes <strong>30 días</strong> desde la entrega para devolver un producto sin usar, en su empaque original.</p>
+        <p>Si el equipo llegó dañado o con falla de fábrica, el cambio es sin costo. Inicia la solicitud desde el formulario de contacto de abajo con tu número de orden.</p>
+        <p>Los pedidos que aún no entran en preparación se pueden cancelar tú mismo desde <a href="/pedidos.html">Mis pedidos</a>.</p>
+    </section>
+
+    <section id="garantia" class="card" style="margin-bottom:14px">
+        <h3>Garantía</h3>
+        <p>Todos los equipos incluyen <strong>garantía directa con la tienda</strong>: 12 meses en laptops y PCs, 6 meses en periféricos, salvo que el fabricante ofrezca más.</p>
+        <p>Para hacerla válida necesitas tu número de orden (aparece en <a href="/pedidos.html">Mis pedidos</a>). No cubre daño físico, líquidos ni mal uso.</p>
+    </section>
+
+    <section id="pagos" class="card" style="margin-bottom:14px">
+        <h3>Pagos y facturación</h3>
+        <p><strong>Métodos:</strong> tarjeta de crédito/débito, transferencia bancaria (SPEI) y pago en tienda.</p>
+        <p><strong>Factura:</strong> solicítala dentro del mismo mes de tu compra con tus datos fiscales mediante el formulario de contacto.</p>
+        <p>Los precios incluyen IVA. El desglose aparece en el resumen del carrito antes de pagar.</p>
+    </section>
+
+    <section id="cuenta" class="card" style="margin-bottom:14px">
+        <h3>Mi perfil</h3>
+        <p>Desde <a href="/perfil.html">tu perfil</a> puedes: revisar pedidos y su envío, guardar <a href="/favoritos.html">favoritos</a>, administrar <a href="/direcciones.html">direcciones</a>, actualizar tus <a href="/datos.html">datos</a>, cambiar tu <a href="/seguridad.html">contraseña</a> y ajustar <a href="/preferencias.html">qué correos recibes</a>.</p>
+    </section>
+
+    <section id="cookies" class="card" style="margin-bottom:14px">
+        <h3>Cookies</h3>
+        <p>Usamos cookies propias para lo esencial: mantener tu sesión iniciada, recordar
+        tu carrito y guardar tus preferencias de la cuenta. No compartimos datos con terceros
+        para publicidad.</p>
+        <p>Tu decisión se guarda en una cookie (<code>tt_consent</code>) durante un año, así
+        que el aviso solo aparece una vez. Para volver a verlo, borra las cookies de este
+        sitio desde la configuración de tu navegador.</p>
+    </section>
+
+    <section id="contacto" class="card">
+        <h3>Contáctanos</h3>
+        <p>¿Un problema con un pedido, garantía o tu cuenta? Abre un <strong>ticket de soporte</strong>
+        y le damos seguimiento con un folio, hilo de mensajes y estado.</p>
+        <div id="contacto-cta"></div>
+        <p style="font-size:.82rem;color:var(--text-muted);margin-top:14px">También puedes escribir a <strong>soporte@tiendatech.mx</strong> · Lun a Vie 9:00–18:00.</p>
+    </section>
+</div>
+
+<div id="footer-placeholder"></div>
+<script src="/js/theme.js"></script>
+<script src="/js/api.js"></script>
+<script src="/js/icons.js"></script>
+<script src="/js/toast.js"></script>
+<script src="/js/layout.js"></script>
+<script src="/js/chatbot.js"></script>
+<script>
+const cliente = Sesion.cliente();
+document.getElementById('contacto-cta').innerHTML = cliente
+    ? `<a class="btn btn-primary" href="/soporte.html">Abrir un ticket</a>
+       <a class="btn btn-outline" href="/soporte.html" style="margin-left:8px">Ver mis tickets</a>`
+    : `<a class="btn btn-primary" href="/login.html?next=/soporte.html">Inicia sesión para abrir un ticket</a>`;
+</script>
+</body>
+</html>

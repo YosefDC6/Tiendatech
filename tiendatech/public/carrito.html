@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Carrito · TiendaTech</title>
+<link rel="stylesheet" href="/css/style.css" />
+</head>
+<body>
+<div id="navbar-placeholder"></div>
+
+<div class="container" style="padding-top:36px;padding-bottom:60px;max-width:900px">
+    <div class="page-hero">
+        <div class="hero-badge" data-ic="cart" data-ic-size="28"></div>
+        <h1>Tu carrito</h1>
+        <p>Revisa tus productos y confirma el envío.</p>
+    </div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;flex-wrap:wrap;gap:10px">
+        <a href="/index.html?ver=todo" class="btn btn-ghost btn-sm">Seguir comprando</a>
+        <button class="btn btn-ghost btn-sm" id="btn-vaciar" hidden>Vaciar carrito</button>
+    </div>
+    <div id="carrito-contenido"><div class="empty-state">Cargando…</div></div>
+</div>
+
+<div id="footer-placeholder"></div>
+<script src="/js/theme.js"></script>
+<script src="/js/api.js"></script>
+<script src="/js/icons.js"></script>
+<script src="/js/toast.js"></script>
+<script src="/js/layout.js"></script>
+<script src="/js/chatbot.js"></script>
+<script>
+const cliente = Sesion.cliente();
+if (!cliente) irALogin();
+
+const ENVIO_GRATIS_DESDE = 10000;
+const COSTO_ENVIO = 199;
+let DIRECCIONES = [];
+let RECOMP = { puntos: 0, valor_punto: 0.10 };
+let SUBTOTAL = 0;
+
+async function cargarCarrito() {
+    const [items, dirs, rec] = await Promise.all([
+        api(`/carrito/${cliente.id}`),
+        api(`/clientes/${cliente.id}/direcciones`).catch(() => []),
+        api(`/clientes/${cliente.id}/recompensas`).catch(() => ({ puntos: 0, valor_punto: 0.10 })),
+    ]);
+    DIRECCIONES = dirs;
+    RECOMP = rec;
+    const cont = document.getElementById('carrito-contenido');
+    document.getElementById('btn-vaciar').hidden = items.length === 0;
+
+    if (items.length === 0) {
+        cont.innerHTML = `
+            <div class="empty-state">
+                Tu carrito está vacío.<br>
+                <a href="/index.html">Ver catálogo</a> · <a href="/favoritos.html">Ver favoritos</a>
+            </div>`;
+        return;
+    }
+
+    let subtotal = 0;
+    const filas = items.map((i) => {
+        const linea = i.precio * i.cantidad;
+        subtotal += Number(linea);
+        return `
+        <div class="card cart-line">
+            <img class="cart-thumb" src="${i.imagen_url || ''}" onerror="this.style.opacity=0.3"
+                 onclick="location.href='/index.html#producto-${i.producto_id}'" alt="${i.nombre}" />
+            <div class="cart-info">
+                <div class="nm">${i.nombre}</div>
+                <div class="mono" style="color:var(--text-muted);font-size:.82rem">${formatoMoneda(i.precio)} c/u</div>
+                <div class="qty-stepper" style="margin-top:8px">
+                    <button onclick="cambiarCantidad(${i.id}, ${i.cantidad - 1}, ${i.stock})" ${i.cantidad <= 1 ? 'disabled' : ''}>−</button>
+                    <span class="qty-val">${i.cantidad}</span>
+                    <button onclick="cambiarCantidad(${i.id}, ${i.cantidad + 1}, ${i.stock})" ${i.cantidad >= i.stock ? 'disabled' : ''}>+</button>
+                </div>
+            </div>
+            <div class="cart-sub">
+                ${formatoMoneda(linea)}
+                <div><button class="btn btn-ghost btn-sm" style="padding:2px 6px" onclick="quitarDelCarrito(${i.id})">Quitar</button></div>
+            </div>
+        </div>`;
+    }).join('');
+
+    SUBTOTAL = subtotal;
+    const impuestos = subtotal * 0.16;
+    const envio = subtotal >= ENVIO_GRATIS_DESDE ? 0 : COSTO_ENVIO;
+    const falta = Math.max(ENVIO_GRATIS_DESDE - subtotal, 0);
+    const pct = Math.min(100, Math.round(subtotal / ENVIO_GRATIS_DESDE * 100));
+
+    // Máximo de puntos canjeables: múltiplos de 100, sin pasar del subtotal
+    const maxCanje = Math.min(
+        RECOMP.puntos - (RECOMP.puntos % 100),
+        Math.floor(subtotal / RECOMP.valor_punto / 100) * 100
+    );
+    const bloquePuntos = maxCanje >= 100
+        ? `<div class="field">
+             <label>Usar puntos del Club (tienes ${RECOMP.puntos.toLocaleString('es-MX')} · valen ${formatoMoneda(RECOMP.puntos * RECOMP.valor_punto)})</label>
+             <div style="display:flex;gap:8px;align-items:center">
+               <input type="number" id="canje" min="0" max="${maxCanje}" step="100" value="0" style="width:120px" oninput="recalcular()" />
+               <span style="font-size:.84rem;color:var(--text-muted)">puntos = <strong id="canje-mxn">$0</strong> de descuento (máx ${maxCanje})</span>
+             </div>
+           </div>`
+        : (RECOMP.puntos > 0
+            ? `<p style="font-size:.82rem;color:var(--text-muted)">Junta 100 puntos para poder canjearlos. Tienes ${RECOMP.puntos}.</p>`
+            : '');
+
+    const shipHint = envio === 0
+        ? `<div class="ship-hint free"><span>${icon('check', 15)} Tu pedido tiene <strong>envío gratis</strong>.</span><div class="ship-bar"><span style="width:100%"></span></div></div>`
+        : `<div class="ship-hint"><span>Te faltan <strong>${formatoMoneda(falta)}</strong> para envío gratis.</span><div class="ship-bar"><span style="width:${pct}%"></span></div></div>`;
+
+    const opcionesDir = DIRECCIONES.length
+        ? `<div class="field"><label>Enviar a una dirección guardada</label>
+             <select id="dir-guardada" onchange="usarDireccionGuardada()">
+               <option value="">— Escribir otra dirección —</option>
+               ${DIRECCIONES.map((d) => `<option value="${d.id}" ${d.predeterminada ? 'selected' : ''}>${d.alias || 'Dirección'} · ${d.calle}</option>`).join('')}
+             </select>
+           </div>`
+        : `<p style="font-size:.82rem;color:var(--text-muted)">Tip: guarda direcciones en <a href="/direcciones.html">tu perfil</a> para el próximo pedido.</p>`;
+
+    cont.innerHTML = `
+        ${filas}
+        <div class="card" style="margin-top:16px">
+            ${shipHint}
+            <div style="display:flex;justify-content:space-between;margin-bottom:6px"><span>Subtotal</span><span class="mono">${formatoMoneda(subtotal)}</span></div>
+            <div style="display:flex;justify-content:space-between;margin-bottom:6px;color:var(--text-muted)"><span>IVA (16%)</span><span class="mono">${formatoMoneda(impuestos)}</span></div>
+            <div style="display:flex;justify-content:space-between;margin-bottom:6px;color:var(--text-muted)"><span>Envío</span><span class="mono">${envio === 0 ? 'Gratis' : formatoMoneda(envio)}</span></div>
+            <div id="linea-desc" style="display:none;justify-content:space-between;margin-bottom:6px;color:var(--success)"><span>Descuento por puntos</span><span class="mono" id="desc-mxn">-$0</span></div>
+            <div style="display:flex;justify-content:space-between;font-weight:700;font-size:1.15rem;margin-bottom:16px"><span>Total</span><span class="mono" id="total-txt">${formatoMoneda(subtotal + impuestos + envio)}</span></div>
+            ${bloquePuntos}
+            ${opcionesDir}
+            <div class="field"><label>Dirección de envío</label><input type="text" id="direccion" placeholder="Calle, número, colonia, ciudad" /></div>
+            <div class="field"><label>Método de pago</label>
+                <select id="metodo-pago">
+                    <option value="tarjeta">Tarjeta de crédito/débito</option>
+                    <option value="transferencia">Transferencia bancaria (SPEI)</option>
+                    <option value="efectivo">Pago en tienda</option>
+                </select>
+            </div>
+            <button class="btn btn-primary btn-lg" style="width:100%" id="btn-comprar" onclick="confirmarCompra()">Confirmar pedido</button>
+        </div>
+    `;
+    ENVIO_ACTUAL = envio; IVA_ACTUAL = impuestos;
+    recalcular();
+    usarDireccionGuardada();
+}
+
+let ENVIO_ACTUAL = 0, IVA_ACTUAL = 0;
+function puntosCanje() {
+    const el = document.getElementById('canje');
+    if (!el) return 0;
+    let v = Math.max(0, Math.min(Number(el.value) || 0, Number(el.max)));
+    v = v - (v % 100);
+    return v;
+}
+function recalcular() {
+    const pts = puntosCanje();
+    const desc = pts * RECOMP.valor_punto;
+    const total = SUBTOTAL + IVA_ACTUAL + ENVIO_ACTUAL - desc;
+    const cm = document.getElementById('canje-mxn'); if (cm) cm.textContent = formatoMoneda(desc);
+    const ld = document.getElementById('linea-desc');
+    if (ld) { ld.style.display = desc > 0 ? 'flex' : 'none'; document.getElementById('desc-mxn').textContent = '-' + formatoMoneda(desc); }
+    const tt = document.getElementById('total-txt'); if (tt) tt.textContent = formatoMoneda(total);
+    const bc = document.getElementById('btn-comprar'); if (bc && !bc.disabled) bc.textContent = 'Confirmar pedido · ' + formatoMoneda(total);
+}
+
+function usarDireccionGuardada() {
+    const sel = document.getElementById('dir-guardada');
+    const input = document.getElementById('direccion');
+    if (!sel || !input) return;
+    if (!sel.value) { input.readOnly = false; return; }
+    const d = DIRECCIONES.find((x) => String(x.id) === sel.value);
+    if (d) { input.value = [d.calle, d.ciudad, d.estado, d.codigo_postal].filter(Boolean).join(', '); input.readOnly = true; }
+}
+
+async function cambiarCantidad(itemId, nueva, stock) {
+    nueva = Math.max(1, Math.min(Number(nueva), stock));
+    try {
+        await api(`/carrito/${itemId}`, { method: 'PUT', body: { cantidad: nueva } });
+        cargarCarrito(); actualizarBadgeCarrito();
+    } catch (e) { toast(e.message, 'error'); }
+}
+async function quitarDelCarrito(itemId) {
+    try {
+        await api(`/carrito/${itemId}`, { method: 'DELETE' });
+        toast('Producto quitado del carrito', 'ok');
+        cargarCarrito(); actualizarBadgeCarrito();
+    } catch (e) { toast(e.message, 'error'); }
+}
+document.getElementById('btn-vaciar').addEventListener('click', async () => {
+    if (!(await confirmar('¿Vaciar todo el carrito?', { okText: 'Vaciar', peligro: true }))) return;
+    try {
+        await api('/carrito', { method: 'DELETE' });
+        toast('Carrito vaciado', 'ok');
+        cargarCarrito(); actualizarBadgeCarrito();
+    } catch (e) { toast(e.message, 'error'); }
+});
+
+async function confirmarCompra() {
+    const items = await api(`/carrito/${cliente.id}`);
+    const direccion = document.getElementById('direccion').value.trim();
+    const metodo_pago = document.getElementById('metodo-pago').value;
+    if (!direccion) { toast('Ingresa o elige una dirección de envío', 'warn'); return; }
+    const btn = document.getElementById('btn-comprar');
+    btn.disabled = true; btn.textContent = 'Procesando…';
+    try {
+        const pedido = await api('/pedidos', {
+            method: 'POST',
+            body: {
+                items: items.map((i) => ({ producto_id: i.producto_id, cantidad: i.cantidad })),
+                metodo_pago, direccion_envio: direccion,
+                puntos_canjear: puntosCanje(),
+            }
+        });
+        actualizarBadgeCarrito();
+        location.href = `/gracias.html?id=${pedido.id}`;
+    } catch (e) {
+        toast(e.message, 'error');
+        btn.disabled = false; btn.textContent = 'Confirmar pedido';
+    }
+}
+
+if (cliente) cargarCarrito();
+</script>
+</body>
+</html>

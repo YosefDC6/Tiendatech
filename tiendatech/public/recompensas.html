@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Club de puntos · TiendaTech</title>
+<link rel="stylesheet" href="/css/style.css" />
+</head>
+<body>
+<div id="navbar-placeholder"></div>
+
+<div class="cuenta-shell">
+    <nav class="cuenta-nav" id="cuenta-nav"></nav>
+    <main class="cuenta-panel" id="cuenta-panel"><div class="empty-state">Cargando…</div></main>
+</div>
+
+<div id="footer-placeholder"></div>
+
+<script src="/js/theme.js"></script>
+<script src="/js/api.js"></script>
+<script src="/js/icons.js"></script>
+<script src="/js/toast.js"></script>
+<script src="/js/layout.js"></script>
+<script src="/js/chatbot.js"></script>
+<script src="/js/cuenta.js"></script>
+<script>
+const NIVEL_ICO = { bronce: 'star', plata: 'star', oro: 'star', platino: 'star' };
+
+montarCuenta('recompensas', async (panel, P) => {
+    const r = await api(`/clientes/${P.id}/recompensas`);
+    const sig = r.siguiente_nivel;
+
+    panel.innerHTML = `
+        <div class="cuenta-head">
+            <h1>Club de puntos</h1>
+            <p>Gana puntos con cada compra y canjéalos como descuento. 100 puntos = ${formatoMoneda(100 * r.valor_punto)}.</p>
+        </div>
+
+        <div class="club-card">
+            <div>
+                <span class="cc-label">Tus puntos</span>
+                <span class="cc-pts">${r.puntos.toLocaleString('es-MX')}</span>
+                <span class="cc-val">equivalen a ${formatoMoneda(r.valor_en_dinero)} en la tienda</span>
+            </div>
+            <span class="cc-nivel">${r.nivel.nombre}</span>
+        </div>
+
+        ${sig ? `
+        <div class="card" style="margin-bottom:20px">
+            <div style="display:flex;justify-content:space-between;font-size:.86rem;margin-bottom:8px">
+                <span>Nivel <strong>${r.nivel.nombre}</strong></span>
+                <span>Siguiente: <strong>${sig.nombre}</strong></span>
+            </div>
+            <div class="club-bar"><span style="width:${r.progreso}%"></span></div>
+            <p style="font-size:.82rem;color:var(--text-muted);margin:8px 0 0">
+                Llegas a ${sig.nombre} con ${formatoMoneda(sig.minGasto)} en compras o ${sig.minCompras} pedidos.
+                Llevas ${formatoMoneda(r.gasto_total)} y ${r.compras_total} pedido(s).
+            </p>
+        </div>` : `
+        <div class="card" style="margin-bottom:20px"><p style="margin:0">Estás en el nivel máximo: <strong>${r.nivel.nombre}</strong>. Ganas x${r.nivel.multiplicador} puntos en cada compra.</p></div>`}
+
+        <h3 style="margin-bottom:12px">Niveles</h3>
+        <div class="niveles-grid">
+            ${r.niveles.map((n) => `
+                <div class="nivel-item ${n.clave === r.nivel.clave ? 'is-actual' : ''}">
+                    <strong>${n.nombre}</strong>
+                    <span>x${n.multiplicador} puntos</span>
+                    <span class="ni-req">Desde ${formatoMoneda(n.minGasto)} ó ${n.minCompras} compras</span>
+                </div>
+            `).join('')}
+        </div>
+
+        <div class="card" style="margin:22px 0">
+            <h3 style="margin-top:0">¿Cómo funciona?</h3>
+            <ul style="margin:0;padding-left:18px;color:var(--text-muted);font-size:.9rem;line-height:1.8">
+                <li>Ganas puntos al confirmar un pedido (más puntos según tu nivel).</li>
+                <li>Canjéalos en el carrito: cada 100 puntos son ${formatoMoneda(100 * r.valor_punto)} de descuento.</li>
+                <li>Tu nivel sube por lo que compras (en total) o por qué tan seguido compras.</li>
+            </ul>
+        </div>
+
+        <h3 style="margin-bottom:12px">Movimientos recientes</h3>
+        <div class="table-wrap">
+            <table>
+                <thead><tr><th>Fecha</th><th>Concepto</th><th style="text-align:right">Puntos</th></tr></thead>
+                <tbody>
+                    ${r.movimientos.length === 0
+                        ? '<tr><td colspan="3">Aún no tienes movimientos.</td></tr>'
+                        : r.movimientos.map((m) => `
+                            <tr>
+                                <td>${formatoFecha(m.fecha)}</td>
+                                <td>${m.motivo || (m.tipo === 'ganado' ? 'Puntos ganados' : 'Canje de puntos')}</td>
+                                <td class="mono" style="text-align:right;color:${m.puntos >= 0 ? 'var(--success)' : 'var(--danger)'}">
+                                    ${m.puntos >= 0 ? '+' : ''}${m.puntos}
+                                </td>
+                            </tr>
+                        `).join('')}
+                </tbody>
+            </table>
+        </div>
+    `;
+});
+</script>
+</body>
+</html>

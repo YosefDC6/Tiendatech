@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Soporte · Admin TiendaTech</title>
+<link rel="stylesheet" href="/css/style.css" />
+</head>
+<body class="theme-light">
+<div class="admin-shell">
+    <aside class="admin-sidebar" id="admin-sidebar-placeholder"></aside>
+    <main class="admin-main" id="main"><p>Cargando…</p></main>
+</div>
+
+<script src="/js/theme.js"></script>
+<script src="/js/api.js"></script>
+<script src="/js/icons.js"></script>
+<script src="/js/toast.js"></script>
+<script src="/admin/js/admin-layout.js"></script>
+<script>
+requireAuthAdmin();
+renderAdminSidebar('soporte');
+const EST = { abierto: 'Abierto', en_proceso: 'En proceso', resuelto: 'Resuelto', cerrado: 'Cerrado' };
+const PRIO = { baja: 'Baja', media: 'Media', alta: 'Alta' };
+const ID = new URLSearchParams(location.search).get('ticket');
+
+if (ID) vistaHilo(ID); else vistaLista();
+
+async function vistaLista() {
+    const f = new URLSearchParams(location.search);
+    const estado = f.get('estado') || 'Todos';
+    const prioridad = f.get('prioridad') || 'Todas';
+    const d = await api(`/admin/tickets?estado=${estado}&prioridad=${prioridad}`);
+    const main = document.getElementById('main');
+    main.innerHTML = `
+        ${adminHeader('Soporte', 'Cola de tickets de los clientes.')}
+        <div class="stat-grid" style="grid-template-columns:repeat(auto-fit,minmax(140px,1fr))">
+            <div class="stat-card"><div class="stat-label">Abiertos</div><div class="stat-value" style="color:var(--info)">${d.conteos.abiertos}</div></div>
+            <div class="stat-card"><div class="stat-label">En proceso</div><div class="stat-value" style="color:var(--warning)">${d.conteos.en_proceso}</div></div>
+            <div class="stat-card"><div class="stat-label">Resueltos</div><div class="stat-value" style="color:var(--success)">${d.conteos.resueltos}</div></div>
+            <div class="stat-card"><div class="stat-label">Cerrados</div><div class="stat-value">${d.conteos.cerrados}</div></div>
+        </div>
+        <div class="filters-bar">
+            <select id="f-estado">
+                ${['Todos', 'abierto', 'en_proceso', 'resuelto', 'cerrado'].map((e) => `<option value="${e}" ${e === estado ? 'selected' : ''}>${EST[e] || e}</option>`).join('')}
+            </select>
+            <select id="f-prio">
+                ${['Todas', 'alta', 'media', 'baja'].map((p) => `<option value="${p}" ${p === prioridad ? 'selected' : ''}>${PRIO[p] || p}</option>`).join('')}
+            </select>
+        </div>
+        <div class="table-wrap">
+            <table>
+                <thead><tr><th>Folio</th><th>Cliente</th><th>Asunto</th><th>Prioridad</th><th>Estado</th><th>Actualizado</th></tr></thead>
+                <tbody>
+                    ${d.tickets.length === 0 ? '<tr><td colspan="6">Sin tickets.</td></tr>' : d.tickets.map((t) => `
+                        <tr onclick="location.href='/admin/soporte.html?ticket=${t.id}'" style="cursor:pointer">
+                            <td class="mono">${t.folio}</td>
+                            <td>${t.cliente_nombre}<div style="font-size:.76rem;color:var(--text-muted)">${t.cliente_correo}</div></td>
+                            <td>${t.asunto}<div style="font-size:.76rem;color:var(--text-muted)">${t.mensajes} mensaje(s) · ${t.categoria}</div></td>
+                            <td><span class="tag prio-${t.prioridad}">${PRIO[t.prioridad]}</span></td>
+                            <td><span class="tag estado-${t.estado}">${EST[t.estado]}</span></td>
+                            <td>${formatoFecha(t.fecha_actualizacion)}</td>
+                        </tr>`).join('')}
+                </tbody>
+            </table>
+        </div>
+    `;
+    document.getElementById('f-estado').addEventListener('change', (e) => filtrar('estado', e.target.value));
+    document.getElementById('f-prio').addEventListener('change', (e) => filtrar('prioridad', e.target.value));
+}
+function filtrar(k, v) {
+    const q = new URLSearchParams(location.search);
+    q.set(k, v);
+    location.search = q.toString();
+}
+
+async function vistaHilo(id) {
+    let t;
+    try { t = await api(`/admin/tickets/${id}`); }
+    catch (e) { document.getElementById('main').innerHTML = `<p>${e.message}</p><a href="/admin/soporte.html">Volver</a>`; return; }
+    document.getElementById('main').innerHTML = `
+        <a href="/admin/soporte.html" style="font-size:.85rem">← Cola de tickets</a>
+        ${adminHeader(t.asunto, `<span class="mono">${t.folio}</span> · <a href="/admin/cliente.html?id=${t.cliente_id}">${t.cliente_nombre}</a> · ${t.cliente_correo}`)}
+        <div class="card" style="margin-bottom:16px">
+            <div class="field-row">
+                <div class="field"><label>Estado</label>
+                    <select id="t-estado">${['abierto', 'en_proceso', 'resuelto', 'cerrado'].map((e) => `<option value="${e}" ${e === t.estado ? 'selected' : ''}>${EST[e]}</option>`).join('')}</select>
+                </div>
+                <div class="field"><label>Prioridad</label>
+                    <select id="t-prio">${['baja', 'media', 'alta'].map((p) => `<option value="${p}" ${p === t.prioridad ? 'selected' : ''}>${PRIO[p]}</option>`).join('')}</select>
+                </div>
+            </div>
+            <button class="btn btn-outline btn-sm" onclick="guardarEstado(${t.id})">Actualizar ticket</button>
+        </div>
+        <div class="hilo">
+            ${t.mensajes.map((m) => `
+                <div class="hilo-msg ${m.autor === 'equipo' ? 'mio' : 'equipo'}">
+                    <div class="hm-meta">${m.autor === 'equipo' ? (m.usuario_nombre || 'Equipo') : t.cliente_nombre} · ${formatoFecha(m.fecha)}</div>
+                    <div class="hm-txt">${m.mensaje.replace(/</g, '&lt;')}</div>
+                </div>`).join('')}
+        </div>
+        <div class="field" style="margin-top:16px"><textarea id="resp" rows="3" placeholder="Responder al cliente…"></textarea></div>
+        <button class="btn btn-primary" onclick="responder(${t.id})">Enviar respuesta</button>
+    `;
+}
+async function guardarEstado(id) {
+    try {
+        await api(`/admin/tickets/${id}`, { method: 'PUT', body: {
+            estado: document.getElementById('t-estado').value,
+            prioridad: document.getElementById('t-prio').value,
+        }});
+        toast('Ticket actualizado', 'ok');
+    } catch (e) { toast(e.message, 'error'); }
+}
+async function responder(id) {
+    const mensaje = document.getElementById('resp').value.trim();
+    if (!mensaje) { toast('Escribe una respuesta', 'warn'); return; }
+    try {
+        await api(`/admin/tickets/${id}/mensajes`, { method: 'POST', body: { mensaje } });
+        location.reload();
+    } catch (e) { toast(e.message, 'error'); }
+}
+</script>
+</body>
+</html>

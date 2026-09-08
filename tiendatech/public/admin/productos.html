@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Inventario · Admin TiendaTech</title>
+<link rel="stylesheet" href="/css/style.css" />
+</head>
+<body class="theme-light">
+<div class="admin-shell">
+    <aside class="admin-sidebar" id="admin-sidebar-placeholder"></aside>
+    <main class="admin-main">
+        <div id="topbar"></div>
+
+        <div class="table-wrap">
+            <table>
+                <thead><tr><th>ID</th><th>Producto</th><th>Categoría</th><th>Precio</th><th>Stock</th><th>Estado</th><th></th></tr></thead>
+                <tbody id="tabla-productos"><tr><td colspan="7">Cargando…</td></tr></tbody>
+            </table>
+        </div>
+    </main>
+</div>
+
+<div class="modal-overlay" id="modal-producto">
+    <div class="modal" style="max-width:640px" id="modal-producto-body"></div>
+</div>
+
+<script src="/js/theme.js"></script>
+<script src="/js/api.js"></script>
+<script src="/js/icons.js"></script>
+<script src="/js/toast.js"></script>
+<script src="/admin/js/admin-layout.js"></script>
+<script>
+requireAuthAdmin();
+renderAdminSidebar('productos');
+document.getElementById('topbar').innerHTML = adminHeader(
+    'Inventario y productos', 'Catálogo de laptops, PCs, componentes y periféricos.',
+    '<button class="btn btn-primary" onclick="abrirNuevoProducto()">Nuevo producto</button>'
+);
+let CATEGORIAS = [];
+
+async function cargarCategorias() {
+    CATEGORIAS = await api('/categorias');
+}
+
+async function cargarProductos() {
+    const productos = await api('/admin/productos');
+    document.getElementById('tabla-productos').innerHTML = productos.map((p) => `
+        <tr>
+            <td class="mono">${p.id}</td>
+            <td>${p.nombre}<div style="color:var(--text-muted);font-size:.78rem">${p.marca || ''}</div></td>
+            <td>${p.categoria_nombre || '—'}</td>
+            <td class="mono">${formatoMoneda(p.precio)}</td>
+            <td class="mono ${p.stock === 0 ? 'stock-out' : p.stock <= p.stock_minimo ? 'stock-low' : 'stock-ok'}">${p.stock}</td>
+            <td>${p.activo ? '<span class="tag" style="color:var(--success);border-color:var(--success)">Activo</span>' : '<span class="tag">Inactivo</span>'}</td>
+            <td>
+                <button class="btn btn-outline btn-sm" onclick="editarProducto(${p.id})">Editar</button>
+                <button class="btn btn-ghost btn-sm" onclick="restock(${p.id})">Restock</button>
+            </td>
+        </tr>
+    `).join('');
+}
+
+function formularioProducto(p = {}) {
+    const opcionesCat = CATEGORIAS.map((c) => `<option value="${c.id}" ${p.categoria_id === c.id ? 'selected' : ''}>${c.nombre}</option>`).join('');
+    const usos = ['gaming', 'oficina', 'diseno', 'programacion', 'estudiante', 'streaming', 'servidor'];
+    const usosActuales = p.uso_recomendado || [];
+    return `
+        <div class="field"><label>Nombre</label><input id="p-nombre" value="${p.nombre || ''}" /></div>
+        <div class="field"><label>Descripción</label><textarea id="p-descripcion" rows="2">${p.descripcion || ''}</textarea></div>
+        <div class="field-row">
+            <div class="field"><label>Categoría</label><select id="p-categoria">${opcionesCat}</select></div>
+            <div class="field"><label>Marca</label><input id="p-marca" value="${p.marca || ''}" /></div>
+        </div>
+        <div class="field-row">
+            <div class="field"><label>Precio</label><input type="number" id="p-precio" value="${p.precio || ''}" /></div>
+            <div class="field"><label>Stock</label><input type="number" id="p-stock" value="${p.stock ?? 0}" /></div>
+        </div>
+        <div class="field-row">
+            <div class="field"><label>Stock mínimo</label><input type="number" id="p-stock-min" value="${p.stock_minimo ?? 5}" /></div>
+            <div class="field"><label>Imagen (URL)</label><input id="p-imagen" value="${p.imagen_url || ''}" /></div>
+        </div>
+        <div class="field-row">
+            <div class="field"><label>Procesador</label><input id="p-procesador" value="${p.procesador || ''}" /></div>
+            <div class="field"><label>RAM (GB)</label><input type="number" id="p-ram" value="${p.ram_gb || ''}" /></div>
+        </div>
+        <div class="field-row">
+            <div class="field"><label>Almacenamiento</label><input id="p-almacenamiento" value="${p.almacenamiento || ''}" /></div>
+            <div class="field"><label>Tarjeta gráfica</label><input id="p-gpu" value="${p.tarjeta_grafica || ''}" /></div>
+        </div>
+        <div class="field"><label>Pantalla</label><input id="p-pantalla" value="${p.pantalla || ''}" /></div>
+        <div class="field">
+            <label>Uso recomendado (para el chatbot)</label>
+            <div style="display:flex;flex-wrap:wrap;gap:8px">
+                ${usos.map((u) => `<label style="display:flex;align-items:center;gap:5px;width:auto;font-size:.82rem">
+                    <input type="checkbox" style="width:auto" class="uso-check" value="${u}" ${usosActuales.includes(u) ? 'checked' : ''}/> ${u}
+                </label>`).join('')}
+            </div>
+        </div>
+        <div class="field"><label><input type="checkbox" id="p-activo" style="width:auto;display:inline-block" ${p.activo !== false ? 'checked' : ''}/> Activo en catálogo</label></div>
+    `;
+}
+
+function abrirNuevoProducto() {
+    document.getElementById('modal-producto-body').innerHTML = `
+        <button class="modal-close" onclick="document.getElementById('modal-producto').classList.remove('open')">${icon('x', 18)}</button>
+        <h3>Nuevo producto</h3>
+        ${formularioProducto()}
+        <button class="btn btn-primary" style="width:100%;margin-top:10px" onclick="guardarProducto()">Crear producto</button>
+    `;
+    document.getElementById('modal-producto').classList.add('open');
+}
+
+async function editarProducto(id) {
+    const productos = await api('/admin/productos');
+    const p = productos.find((x) => x.id === id);
+    document.getElementById('modal-producto-body').innerHTML = `
+        <button class="modal-close" onclick="document.getElementById('modal-producto').classList.remove('open')">${icon('x', 18)}</button>
+        <h3>Editar producto</h3>
+        ${formularioProducto(p)}
+        <div style="display:flex;gap:10px;margin-top:10px">
+            <button class="btn btn-primary" style="flex:1" onclick="guardarProducto(${id})">Guardar cambios</button>
+            <button class="btn btn-danger" onclick="eliminarProducto(${id})">Eliminar</button>
+        </div>
+    `;
+    document.getElementById('modal-producto').classList.add('open');
+}
+
+function leerFormularioProducto() {
+    const usoRecomendado = Array.from(document.querySelectorAll('.uso-check:checked')).map((c) => c.value);
+    return {
+        nombre: document.getElementById('p-nombre').value,
+        descripcion: document.getElementById('p-descripcion').value,
+        categoria_id: Number(document.getElementById('p-categoria').value),
+        marca: document.getElementById('p-marca').value,
+        precio: Number(document.getElementById('p-precio').value),
+        stock: Number(document.getElementById('p-stock').value),
+        stock_minimo: Number(document.getElementById('p-stock-min').value),
+        imagen_url: document.getElementById('p-imagen').value,
+        procesador: document.getElementById('p-procesador').value,
+        ram_gb: document.getElementById('p-ram').value ? Number(document.getElementById('p-ram').value) : null,
+        almacenamiento: document.getElementById('p-almacenamiento').value,
+        tarjeta_grafica: document.getElementById('p-gpu').value,
+        pantalla: document.getElementById('p-pantalla').value,
+        uso_recomendado: usoRecomendado,
+        activo: document.getElementById('p-activo').checked,
+    };
+}
+
+async function guardarProducto(id) {
+    const body = leerFormularioProducto();
+    if (!body.nombre || !body.precio) { toast('Nombre y precio son obligatorios', 'warn'); return; }
+    try {
+        if (id) await api(`/admin/productos/${id}`, { method: 'PUT', body });
+        else await api('/admin/productos', { method: 'POST', body });
+        document.getElementById('modal-producto').classList.remove('open');
+        toast('Producto guardado', 'ok');
+        cargarProductos();
+    } catch (e) { toast(e.message, 'error'); }
+}
+
+async function eliminarProducto(id) {
+    if (!(await confirmar('¿Eliminar este producto?', { okText: 'Eliminar', peligro: true }))) return;
+    try {
+        await api(`/admin/productos/${id}`, { method: 'DELETE' });
+        document.getElementById('modal-producto').classList.remove('open');
+        toast('Producto eliminado', 'ok');
+        cargarProductos();
+    } catch (e) { toast(e.message, 'error'); }
+}
+
+async function restock(id) {
+    const cantidad = await pedirDato('¿Cuántas unidades vas a agregar al stock?', { tipo: 'number', placeholder: 'Ej. 10' });
+    if (!cantidad || isNaN(cantidad) || Number(cantidad) < 1) return;
+    try {
+        await api(`/admin/productos/${id}/restock`, { method: 'POST', body: { cantidad: Number(cantidad), motivo: 'Restock manual desde admin' } });
+        toast(`+${cantidad} al stock`, 'ok');
+        cargarProductos();
+    } catch (e) { toast(e.message, 'error'); }
+}
+
+(async () => { await cargarCategorias(); await cargarProductos(); })();
+</script>
+</body>
+</html>

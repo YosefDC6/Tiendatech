@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Mis pedidos · TiendaTech</title>
+<link rel="stylesheet" href="/css/style.css" />
+</head>
+<body>
+<div id="navbar-placeholder"></div>
+
+<div class="cuenta-shell">
+    <nav class="cuenta-nav" id="cuenta-nav"></nav>
+    <main class="cuenta-panel" id="cuenta-panel"><div class="empty-state">Cargando…</div></main>
+</div>
+
+<div id="footer-placeholder"></div>
+
+<script src="/js/theme.js"></script>
+<script src="/js/api.js"></script>
+<script src="/js/icons.js"></script>
+<script src="/js/toast.js"></script>
+<script src="/js/layout.js"></script>
+<script src="/js/chatbot.js"></script>
+<script src="/js/cuenta.js"></script>
+<script>
+const FLUJO = ['confirmado', 'procesando', 'enviado', 'entregado'];
+const CANCELABLES = ['pendiente', 'confirmado'];
+let CID = null;
+
+montarCuenta('pedidos', async (panel, P) => {
+    CID = P.id;
+    const pedidos = await api(`/pedidos/cliente/${P.id}`);
+    if (pedidos.length === 0) {
+        panel.innerHTML = `<div class="cuenta-head"><h1>Mis pedidos</h1></div>
+            <div class="empty-state">Todavía no has hecho ningún pedido.<br><a href="/index.html?ver=todo">Explorar el catálogo</a></div>`;
+        return;
+    }
+    panel.innerHTML = `<div class="cuenta-head"><h1>Mis pedidos</h1><p>${pedidos.length} pedido(s).</p></div><div id="lista-pedidos"></div>`;
+    document.getElementById('lista-pedidos').innerHTML = pedidos.map((p) => {
+        const idx = FLUJO.indexOf(p.estado);
+        const track = p.estado === 'cancelado'
+            ? '<div style="color:var(--danger);font-size:.82rem;margin-top:8px">Pedido cancelado</div>'
+            : `<div class="order-track">${FLUJO.map((_, i) => `<div class="step ${i <= idx ? 'done' : ''}"></div>`).join('')}</div>
+               <div style="font-size:.78rem;color:var(--text-muted)">${['Confirmado', 'En preparación', 'Enviado', 'Entregado'][Math.max(idx, 0)]}</div>`;
+        return `
+        <div class="order-row">
+            <div class="order-top">
+                <span class="mono">${p.numero_orden}</span>
+                <span class="tag">${ESTADO_LABEL[p.estado] || p.estado}</span>
+            </div>
+            <div style="font-size:.85rem;color:var(--text-muted)">${formatoFecha(p.fecha_pedido)} · ${p.productos || '—'}</div>
+            <div style="font-weight:700;margin-top:6px">${formatoMoneda(p.total)}</div>
+            ${track}
+            <div style="display:flex;gap:8px;margin-top:12px">
+                <button class="btn btn-outline btn-sm" onclick="detallePedido(${p.id})">Ver detalle</button>
+                ${CANCELABLES.includes(p.estado) ? `<button class="btn btn-ghost btn-sm" onclick="cancelarPedido(${p.id})">Cancelar</button>` : ''}
+            </div>
+            <div id="det-${p.id}"></div>
+        </div>`;
+    }).join('');
+});
+
+async function detallePedido(id) {
+    const cont = document.getElementById('det-' + id);
+    if (cont.dataset.open) { cont.innerHTML = ''; delete cont.dataset.open; return; }
+    const d = await api(`/pedidos/${id}/detalle`);
+    cont.dataset.open = '1';
+    cont.innerHTML = `
+        <div class="table-wrap" style="margin-top:12px">
+            <table>
+                <thead><tr><th>Producto</th><th>Cant.</th><th>Subtotal</th></tr></thead>
+                <tbody>${d.items.map((i) => `<tr><td>${i.nombre}</td><td class="mono">${i.cantidad}</td><td class="mono">${formatoMoneda(i.subtotal)}</td></tr>`).join('')}</tbody>
+            </table>
+        </div>
+        <div style="font-size:.84rem;color:var(--text-muted);margin-top:8px">Envío a: ${d.direccion_envio || '—'} · Pago: ${d.metodo_pago || '—'}</div>
+    `;
+}
+
+async function cancelarPedido(id) {
+    if (!(await confirmar('¿Cancelar este pedido? Se devolverá el stock.', { okText: 'Sí, cancelar', peligro: true }))) return;
+    try {
+        await api(`/pedidos/${id}/cancelar`, { method: 'PUT', body: { cliente_id: CID } });
+        toast('Pedido cancelado', 'ok');
+        setTimeout(() => location.reload(), 600);
+    } catch (e) { toast(e.message, 'error'); }
+}
+</script>
+</body>
+</html>

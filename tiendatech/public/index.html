@@ -1,0 +1,505 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>TiendaTech · Cómputo y electrónica</title>
+<link rel="stylesheet" href="/css/style.css" />
+</head>
+<body>
+<div id="navbar-placeholder"></div>
+
+<header class="hero" id="hero">
+    <div class="hero-inner">
+        <h1>El equipo correcto para lo&nbsp;que <span class="hl">vas a hacer</span> con&nbsp;él.</h1>
+        <p>Compara procesador, RAM y gráficos en cada ficha, revisa el stock antes de comprar, y si no sabes por dónde empezar, deja que el asistente te recomiende según tu presupuesto.</p>
+        <div class="hero-actions">
+            <a href="/index.html?ver=todo" class="btn btn-primary btn-lg">Ver catálogo</a>
+            <a href="#" class="btn btn-outline btn-lg" onclick="document.getElementById('chatbot-toggle').click(); return false;">Preguntarle al asistente</a>
+        </div>
+    </div>
+</header>
+
+<section class="section container" id="explorar">
+    <div class="asesor-band" style="margin-bottom:32px">
+        <div class="ab-txt">
+            <strong>¿No sabes cuál elegir?</strong>
+            <span>Dile al asesor para qué lo quieres y cuánto quieres gastar. Te recomienda solo lo que hay en stock.</span>
+        </div>
+        <button class="btn btn-primary" onclick="document.getElementById('chatbot-toggle').click()">Preguntar al asesor</button>
+    </div>
+
+    <h2 class="home-h2">Cómo funciona</h2>
+    <div class="como-func" style="margin-bottom:36px">
+        <div class="cf-paso"><span class="cf-num">1</span><strong>Explora o busca</strong><span>Filtra por categoría, uso o presupuesto, o busca por marca desde la barra de arriba.</span></div>
+        <div class="cf-paso"><span class="cf-num">2</span><strong>Pregunta al asesor</strong><span>El botón azul abajo a la derecha abre el asistente: te sugiere equipos según tu presupuesto y el stock real.</span></div>
+        <div class="cf-paso"><span class="cf-num">3</span><strong>Compra y gana puntos</strong><span>Cada compra suma puntos del Club que valen dinero en tu siguiente pedido.</span></div>
+    </div>
+
+    <div class="section-head">
+        <h2 class="home-h2" style="margin:0">Explora por categoría</h2>
+        <a href="/index.html?ver=todo">Ver todo el catálogo</a>
+    </div>
+    <div class="cat-tiles" id="cat-tiles"></div>
+
+    <h2 class="home-h2" style="margin-top:40px">¿Para qué lo vas a usar?</h2>
+    <div class="use-chips">
+        <a href="/index.html?uso=gaming">Gaming</a>
+        <a href="/index.html?uso=oficina">Oficina</a>
+        <a href="/index.html?uso=diseno">Diseño</a>
+        <a href="/index.html?uso=programacion">Programación</a>
+        <a href="/index.html?uso=estudiante">Estudiante</a>
+        <a href="/index.html?uso=streaming">Streaming</a>
+    </div>
+</section>
+
+<section class="section container" id="destacados" hidden>
+    <div class="section-head">
+        <h2 class="home-h2" style="margin:0">Destacados</h2>
+        <a href="/index.html?ver=todo">Ver todos</a>
+    </div>
+    <div class="grid-products" id="grid-destacados"></div>
+</section>
+
+<section class="section container" id="recientes" hidden>
+    <h2 class="home-h2">Vistos recientemente</h2>
+    <div class="recent-strip" id="recent-strip"></div>
+</section>
+
+<section class="section container" id="catalogo" hidden>
+    <div class="breadcrumbs" id="breadcrumbs"><a href="/index.html">Inicio</a> / Catálogo</div>
+    <div class="section-head">
+        <div>
+            <h2 id="cat-title">Catálogo</h2>
+            <p id="cat-sub">Afina por categoría, uso o presupuesto.</p>
+        </div>
+    </div>
+
+    <div class="filters-bar">
+        <select id="f-categoria"><option value="">Todas las categorías</option></select>
+        <select id="f-uso">
+            <option value="">Cualquier uso</option>
+            <option value="gaming">Gaming</option>
+            <option value="oficina">Oficina</option>
+            <option value="diseno">Diseño</option>
+            <option value="programacion">Programación</option>
+            <option value="estudiante">Estudiante</option>
+            <option value="streaming">Streaming</option>
+        </select>
+        <select id="f-precio">
+            <option value="">Cualquier precio</option>
+            <option value="10000">Hasta $10,000</option>
+            <option value="20000">Hasta $20,000</option>
+            <option value="35000">Hasta $35,000</option>
+            <option value="60000">Hasta $60,000</option>
+        </select>
+        <button class="btn btn-outline btn-sm" onclick="limpiarFiltros()">Limpiar</button>
+    </div>
+
+    <div class="active-filters" id="active-filters"></div>
+
+    <div class="toolbar">
+        <span class="result-count" id="result-count">&nbsp;</span>
+        <select id="f-orden">
+            <option value="nombre">Ordenar: nombre (A-Z)</option>
+            <option value="precio-asc">Precio: menor a mayor</option>
+            <option value="precio-desc">Precio: mayor a menor</option>
+        </select>
+    </div>
+
+    <div class="grid-products" id="grid-productos">
+        <div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div>
+    </div>
+</section>
+
+<div id="footer-placeholder"></div>
+
+<!-- Modal detalle de producto -->
+<div class="modal-overlay" id="modal-producto">
+    <div class="modal" id="modal-producto-body"></div>
+</div>
+
+<script src="/js/theme.js"></script>
+<script src="/js/api.js"></script>
+<script src="/js/icons.js"></script>
+<script src="/js/toast.js"></script>
+<script src="/js/layout.js"></script>
+<script src="/js/chatbot.js"></script>
+<script>
+let TODOS_LOS_PRODUCTOS = [];
+let BUSQUEDA = '';   // el buscador vive en la navbar; aquí solo guardamos el término
+
+async function cargarCategorias() {
+    const categorias = await api('/categorias');
+    const select = document.getElementById('f-categoria');
+    categorias.forEach((c) => {
+        const opt = document.createElement('option');
+        opt.value = c.nombre;
+        opt.textContent = c.nombre;
+        select.appendChild(opt);
+    });
+    const tiles = document.getElementById('cat-tiles');
+    if (tiles) {
+        tiles.innerHTML = categorias.map((c) => `
+            <a class="cat-tile" href="/index.html?categoria=${encodeURIComponent(c.nombre)}">
+                <span class="cat-tile-ico">${iconCategoria(c.nombre, 24)}</span>
+                <span class="cat-tile-name">${c.nombre}</span>
+            </a>
+        `).join('');
+    }
+}
+
+// Portada limpia = hero + explorar + destacados + recientes.
+// Con ?ver=todo / ?busqueda= / ?categoria= / ?uso= / ?precio_max= pasamos
+// a "modo catálogo": se ve solo la lista con sus filtros.
+function modoResultados() {
+    const q = new URLSearchParams(location.search);
+    const enCatalogo = !!(q.get('ver') || q.get('busqueda') || q.get('categoria') || q.get('uso') || q.get('precio_max'));
+    document.getElementById('catalogo').hidden = !enCatalogo;
+    // hero + explorar: solo en la portada
+    ['hero', 'explorar'].forEach((id) => document.getElementById(id).hidden = enCatalogo);
+    // destacados + recientes: siempre ocultos aquí; sus render() los muestran si hay contenido
+    ['destacados', 'recientes'].forEach((id) => document.getElementById(id).hidden = true);
+    return enCatalogo;
+}
+
+// Portada: rejilla corta de "Destacados"
+function renderDestacados() {
+    const cont = document.getElementById('grid-destacados');
+    if (!cont) return;
+    const lista = TODOS_LOS_PRODUCTOS.filter((p) => p.stock > 0).slice(0, 8);
+    if (lista.length === 0) { document.getElementById('destacados').hidden = true; return; }
+    document.getElementById('destacados').hidden = false;
+    cont.innerHTML = tarjetasProducto(lista);
+}
+
+// ---- Vistos recientemente (localStorage) ----
+function guardarVisto(id) {
+    try {
+        let v = JSON.parse(localStorage.getItem('tt_vistos') || '[]');
+        v = [id, ...v.filter((x) => x !== id)].slice(0, 8);
+        localStorage.setItem('tt_vistos', JSON.stringify(v));
+    } catch { /* modo privado, etc. */ }
+}
+function renderRecientes() {
+    let ids = [];
+    try { ids = JSON.parse(localStorage.getItem('tt_vistos') || '[]'); } catch { return; }
+    const prods = ids.map((id) => TODOS_LOS_PRODUCTOS.find((p) => p.id === id)).filter(Boolean);
+    if (prods.length < 2) return;
+    document.getElementById('recientes').hidden = false;
+    document.getElementById('recent-strip').innerHTML = prods.map((p) => `
+        <div class="recent-card" onclick="location.href='/index.html#producto-${p.id}'">
+            <img src="${p.imagen_url || ''}" onerror="this.style.opacity=.3" alt="${p.nombre}" />
+            <div class="rc-body">
+                <span class="rc-name">${p.nombre}</span>
+                <span class="rc-price">${formatoMoneda(p.precio)}</span>
+            </div>
+        </div>
+    `).join('');
+}
+
+function specsLinea(p) {
+    const partes = [];
+    if (p.procesador) partes.push(p.procesador);
+    if (p.ram_gb) partes.push(`${p.ram_gb}GB RAM`);
+    if (p.almacenamiento) partes.push(p.almacenamiento);
+    if (p.tarjeta_grafica) partes.push(p.tarjeta_grafica);
+    if (p.pantalla) partes.push(p.pantalla);
+    return partes.join(' · ') || (p.categoria_nombre || '');
+}
+
+function stockTexto(p) {
+    if (p.stock === 0) return '<span class="product-stock stock-out">Agotado</span>';
+    if (p.stock <= p.stock_minimo) return `<span class="product-stock stock-low">Últimas ${p.stock} piezas</span>`;
+    return `<span class="product-stock stock-ok">En stock</span>`;
+}
+
+function tarjetasProducto(lista) {
+    return lista.map((p) => `
+        <div class="product-card" id="producto-${p.id}">
+            <button class="fav-btn ${Favoritos.tiene(p.id) ? 'on' : ''}" title="Guardar en favoritos" aria-label="Favorito" onclick="toggleFav(event, ${p.id})">${icon('heart', 16)}</button>
+            <img src="${p.imagen_url || ''}" alt="${p.nombre}" loading="lazy" onerror="this.style.opacity=0.3" onclick="verProducto(${p.id})" style="cursor:pointer" />
+            <div class="product-body">
+                <span class="product-brand">${p.marca || ''}</span>
+                <span class="product-name" onclick="verProducto(${p.id})" style="cursor:pointer">${p.nombre}</span>
+                <span class="product-specs">${specsLinea(p)}</span>
+                <span class="product-price">${formatoMoneda(p.precio)}</span>
+                ${stockTexto(p)}
+                <div class="card-actions">
+                    <button class="btn btn-outline btn-sm" onclick="verProducto(${p.id})">Ver</button>
+                    <button class="btn btn-primary btn-sm" ${p.stock === 0 ? 'disabled' : ''} onclick="agregarAlCarrito(${p.id})">${p.stock === 0 ? 'Sin stock' : 'Agregar'}</button>
+                </div>
+            </div>
+        </div>
+    `).join('');
+}
+
+function renderProductos(lista) {
+    const grid = document.getElementById('grid-productos');
+    document.getElementById('result-count').textContent = `${lista.length} producto${lista.length === 1 ? '' : 's'}`;
+    if (lista.length === 0) {
+        grid.innerHTML = '<div class="empty-state">No encontramos productos con esos filtros. Prueba ajustar los filtros o <a href="#" onclick="limpiarFiltros();return false;">quitarlos todos</a>.</div>';
+        return;
+    }
+    grid.innerHTML = tarjetasProducto(lista);
+}
+
+function ordenar(lista) {
+    const modo = document.getElementById('f-orden').value;
+    const l = [...lista];
+    if (modo === 'precio-asc') l.sort((a, b) => a.precio - b.precio);
+    else if (modo === 'precio-desc') l.sort((a, b) => b.precio - a.precio);
+    else l.sort((a, b) => a.nombre.localeCompare(b.nombre));
+    return l;
+}
+
+async function cargarProductos() {
+    const params = new URLSearchParams();
+    const busqueda = BUSQUEDA.trim();
+    const categoria = document.getElementById('f-categoria').value;
+    const uso = document.getElementById('f-uso').value;
+    const precio = document.getElementById('f-precio').value;
+    if (busqueda) params.set('busqueda', busqueda);
+    if (categoria) params.set('categoria', categoria);
+    if (uso) params.set('uso', uso);
+    if (precio) params.set('precio_max', precio);
+    if (![...params].length) params.set('ver', 'todo');
+
+    // Refleja el estado en la URL (para compartir / volver atrás)
+    history.replaceState(null, '', '/index.html?' + params.toString());
+    actualizarEncabezado(categoria, busqueda, uso);
+
+    const grid = document.getElementById('grid-productos');
+    grid.innerHTML = '<div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div>';
+    renderFilterChips(busqueda, categoria, uso, precio);
+    try {
+        const productos = await api('/productos?' + params.toString());
+        TODOS_LOS_PRODUCTOS = productos;
+        renderProductos(ordenar(productos));
+        abrirDesdeHash();
+    } catch (e) {
+        grid.innerHTML = '<div class="empty-state">No se pudo conectar con el servidor. Verifica que el backend esté corriendo.</div>';
+    }
+}
+
+const USO_LABEL = { gaming: 'Gaming', oficina: 'Oficina', diseno: 'Diseño', programacion: 'Programación', estudiante: 'Estudiante', streaming: 'Streaming' };
+function renderFilterChips(busqueda, categoria, uso, precio) {
+    const cont = document.getElementById('active-filters');
+    const chips = [];
+    if (busqueda) chips.push(['busqueda', `“${busqueda}”`]);
+    if (categoria) chips.push(['f-categoria', categoria]);
+    if (uso) chips.push(['f-uso', USO_LABEL[uso] || uso]);
+    if (precio) chips.push(['f-precio', `Hasta ${formatoMoneda(precio)}`]);
+    cont.innerHTML = chips.length === 0 ? '' : (
+        chips.map(([campo, txt]) =>
+            `<span class="filter-chip">${txt} <button onclick="quitarFiltro('${campo}')" aria-label="Quitar">${icon('x', 12)}</button></span>`
+        ).join('') +
+        (chips.length > 1 ? `<button class="btn btn-ghost btn-sm" onclick="limpiarFiltros()">Limpiar todo</button>` : '')
+    );
+}
+function quitarFiltro(campo) {
+    if (campo === 'busqueda') BUSQUEDA = '';
+    else document.getElementById(campo).value = '';
+    cargarProductos();
+}
+
+function actualizarEncabezado(categoria, busqueda, uso) {
+    const bc = document.getElementById('breadcrumbs');
+    const title = document.getElementById('cat-title');
+    if (busqueda) {
+        title.textContent = `Resultados para "${busqueda}"`;
+        bc.innerHTML = `<a href="/index.html">Inicio</a> / Búsqueda`;
+    } else if (categoria) {
+        title.textContent = categoria;
+        bc.innerHTML = `<a href="/index.html">Inicio</a> / <a href="/index.html">Catálogo</a> / ${categoria}`;
+    } else if (uso) {
+        title.textContent = `Equipos para ${uso}`;
+        bc.innerHTML = `<a href="/index.html">Inicio</a> / Catálogo`;
+    } else {
+        title.textContent = 'Catálogo';
+        bc.innerHTML = `<a href="/index.html">Inicio</a> / Catálogo`;
+    }
+}
+
+function limpiarFiltros() {
+    BUSQUEDA = '';
+    ['f-categoria', 'f-uso', 'f-precio'].forEach((id) => document.getElementById(id).value = '');
+    cargarProductos();
+}
+
+function verProducto(id) {
+    const p = TODOS_LOS_PRODUCTOS.find((x) => x.id === id);
+    if (!p) return;
+    guardarVisto(id);
+    const fav = Favoritos.tiene(id);
+    const urgencia = (p.stock > 0 && p.stock <= p.stock_minimo)
+        ? `<div class="stock-urgente">${icon('alert', 14)} ¡Solo quedan ${p.stock}! Cómpralo antes de que se agote.</div>` : '';
+    document.getElementById('modal-producto-body').innerHTML = `
+        <button class="modal-close" onclick="document.getElementById('modal-producto').classList.remove('open')">${icon('x', 20)}</button>
+        <img src="${p.imagen_url || ''}" alt="${p.nombre}" style="width:100%;max-height:220px;object-fit:contain;background:var(--bg-panel-2);border-radius:8px;margin-bottom:16px" onerror="this.style.opacity=0.3" />
+        <span class="product-brand">${p.marca || ''}</span>
+        <h3>${p.nombre}</h3>
+        <p>${p.descripcion || ''}</p>
+        <div class="product-specs" style="margin-bottom:14px">${specsLinea(p)}</div>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+            <span class="product-price">${formatoMoneda(p.precio)}</span>
+            ${stockTexto(p)}
+        </div>
+        ${urgencia}
+        ${p.stock > 0 ? `
+        <div class="modal-qty-row">
+            <label>Cantidad</label>
+            <div class="qty-stepper">
+                <button type="button" onclick="ajustarQty(-1, ${p.stock})">−</button>
+                <span class="qty-val" id="modal-qty">1</span>
+                <button type="button" onclick="ajustarQty(1, ${p.stock})">+</button>
+            </div>
+        </div>` : ''}
+        <div style="display:flex;gap:10px;margin-top:6px">
+            <button class="btn btn-primary" style="flex:1" ${p.stock === 0 ? 'disabled' : ''} onclick="agregarAlCarrito(${p.id}, true)">
+                ${p.stock === 0 ? 'Sin stock' : 'Agregar al carrito'}
+            </button>
+            <button class="btn btn-outline ${fav ? 'fav-on' : ''}" id="modal-fav" onclick="toggleFav(event, ${p.id}, true)">${icon('heart', 16)} ${fav ? 'Guardado' : 'Guardar'}</button>
+        </div>
+        <div class="modal-resenas" id="modal-resenas"><div style="color:var(--text-muted);font-size:.85rem">Cargando reseñas…</div></div>
+    `;
+    document.getElementById('modal-producto').classList.add('open');
+    cargarResenas(id);
+}
+
+function estrellasHTML(n, editable) {
+    let s = '';
+    for (let i = 1; i <= 5; i++) {
+        s += `<span class="star ${i <= n ? 'on' : ''}" ${editable ? `data-val="${i}" onclick="setEstrella(${i})"` : ''}>${icon('star', 15)}</span>`;
+    }
+    return `<span class="stars ${editable ? 'stars-input' : ''}" id="${editable ? 'stars-edit' : ''}">${s}</span>`;
+}
+let RESENA_VAL = 0;
+function setEstrella(v) {
+    RESENA_VAL = v;
+    document.querySelectorAll('#stars-edit .star').forEach((el) =>
+        el.classList.toggle('on', Number(el.dataset.val) <= v));
+}
+async function cargarResenas(pid) {
+    const cont = document.getElementById('modal-resenas');
+    if (!cont) return;
+    let data;
+    try { data = await api(`/productos/${pid}/resenas`); } catch { cont.innerHTML = ''; return; }
+    const cli = Sesion.cliente();
+    const mia = data.resenas.find((r) => cli && r.cliente_nombre === cli.nombre);
+    RESENA_VAL = mia ? mia.calificacion : 0;
+
+    cont.innerHTML = `
+        <div class="mr-head">
+            ${data.total > 0 ? `<span class="mr-prom">${data.promedio.toFixed(1)}</span>${estrellasHTML(Math.round(data.promedio), false)}<span style="color:var(--text-muted);font-size:.85rem">(${data.total})</span>` : '<span style="color:var(--text-muted);font-size:.9rem">Sé el primero en reseñar este producto.</span>'}
+        </div>
+        ${data.resenas.slice(0, 4).map((r) => `
+            <div class="mr-item">
+                ${estrellasHTML(r.calificacion, false)}
+                <div class="mr-meta">${r.cliente_nombre} · ${formatoFecha(r.fecha)}</div>
+                ${r.comentario ? `<div>${r.comentario.replace(/</g, '&lt;')}</div>` : ''}
+            </div>`).join('')}
+        ${cli ? `
+            <div style="margin-top:12px">
+                <div style="font-size:.85rem;margin-bottom:4px">${mia ? 'Editar tu reseña' : 'Escribir reseña'}</div>
+                ${estrellasHTML(RESENA_VAL, true)}
+                <textarea id="mr-com" rows="2" placeholder="¿Qué te pareció? (opcional)" style="margin-top:8px">${mia && mia.comentario ? mia.comentario : ''}</textarea>
+                <button class="btn btn-primary btn-sm" style="margin-top:8px" onclick="enviarResena(${pid})">${mia ? 'Actualizar' : 'Publicar'}</button>
+            </div>`
+            : '<p style="font-size:.82rem;color:var(--text-muted);margin-top:10px"><a href="/login.html">Inicia sesión</a> para dejar una reseña.</p>'}
+    `;
+}
+async function enviarResena(pid) {
+    const cli = Sesion.cliente();
+    if (!cli) { irALogin('Inicia sesión para reseñar'); return; }
+    if (!(RESENA_VAL >= 1)) { toast('Elige una calificación de 1 a 5 estrellas', 'warn'); return; }
+    try {
+        await api(`/clientes/${cli.id}/resenas`, {
+            method: 'POST',
+            body: { producto_id: pid, calificacion: RESENA_VAL, comentario: document.getElementById('mr-com').value.trim() },
+        });
+        toast('¡Gracias por tu reseña!', 'ok');
+        cargarResenas(pid);
+    } catch (e) { toast(e.message, 'error'); }
+}
+
+function ajustarQty(delta, max) {
+    const el = document.getElementById('modal-qty');
+    if (!el) return;
+    let v = Math.max(1, Math.min(Number(el.textContent) + delta, max));
+    el.textContent = v;
+}
+
+async function agregarAlCarrito(productoId, cerrarModal) {
+    const cliente = Sesion.cliente();
+    if (!cliente) { irALogin('Inicia sesión para comprar'); return; }
+    const qtyEl = document.getElementById('modal-qty');
+    const cantidad = (cerrarModal && qtyEl) ? Number(qtyEl.textContent) || 1 : 1;
+    try {
+        await api('/carrito', { method: 'POST', body: { producto_id: productoId, cantidad } });
+        actualizarBadgeCarrito();
+        toast(cantidad > 1 ? `${cantidad} agregados al carrito` : 'Agregado al carrito', 'ok');
+        if (cerrarModal) document.getElementById('modal-producto').classList.remove('open');
+    } catch (e) { toast(e.message, 'error'); }
+}
+
+async function toggleFav(ev, productoId, desdeModal) {
+    ev.stopPropagation();
+    try {
+        const ahora = await Favoritos.alternar(productoId);
+        if (ahora === null) return; // redirigió a login
+        toast(ahora ? 'Guardado en favoritos' : 'Quitado de favoritos', 'ok');
+        const btn = document.querySelector(`#producto-${productoId} .fav-btn`);
+        if (btn) btn.classList.toggle('on', ahora);
+        if (desdeModal) {
+            const mb = document.getElementById('modal-fav');
+            if (mb) { mb.classList.toggle('fav-on', ahora); mb.innerHTML = `${icon('heart', 16)} ${ahora ? 'Guardado' : 'Guardar'}`; }
+        }
+        actualizarBadgeFavoritos();
+    } catch (e) { toast(e.message, 'error'); }
+}
+
+// Si llegamos con #producto-<id> (p.ej. desde el chatbot), abrir su ficha
+function abrirDesdeHash() {
+    const m = (location.hash || '').match(/^#producto-(\d+)$/);
+    if (!m) return;
+    const id = Number(m[1]);
+    const card = document.getElementById('producto-' + id);
+    if (card) card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    verProducto(id);
+}
+window.addEventListener('hashchange', abrirDesdeHash);
+
+['f-categoria', 'f-uso', 'f-precio'].forEach((id) => {
+    document.getElementById(id).addEventListener('change', cargarProductos);
+});
+document.getElementById('f-orden').addEventListener('change', () => renderProductos(ordenar(TODOS_LOS_PRODUCTOS)));
+
+// Aplica filtros que vengan en la URL (el término de búsqueda vive en BUSQUEDA)
+function aplicarFiltrosDeURL() {
+    const q = new URLSearchParams(location.search);
+    BUSQUEDA = q.get('busqueda') || '';
+    if (q.get('categoria')) document.getElementById('f-categoria').value = q.get('categoria');
+    if (q.get('uso')) document.getElementById('f-uso').value = q.get('uso');
+    if (q.get('precio_max')) document.getElementById('f-precio').value = q.get('precio_max');
+}
+
+(async () => {
+    const enCatalogo = modoResultados();
+    await cargarCategorias();
+    await Favoritos.cargar();
+    const todos = await api('/productos').catch(() => []);
+    TODOS_LOS_PRODUCTOS = todos;
+
+    if (enCatalogo) {
+        aplicarFiltrosDeURL();
+        await cargarProductos();
+    } else {
+        renderDestacados();
+        renderRecientes();
+        abrirDesdeHash();
+    }
+})();
+</script>
+</body>
+</html>

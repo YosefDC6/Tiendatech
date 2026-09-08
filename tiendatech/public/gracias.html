@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>¡Gracias por tu compra! · TiendaTech</title>
+<link rel="stylesheet" href="/css/style.css" />
+</head>
+<body>
+<div id="navbar-placeholder"></div>
+
+<div class="thanks-wrap" id="thanks">
+    <div class="empty-state">Cargando tu confirmación…</div>
+</div>
+
+<div id="footer-placeholder"></div>
+<script src="/js/theme.js"></script>
+<script src="/js/api.js"></script>
+<script src="/js/icons.js"></script>
+<script src="/js/toast.js"></script>
+<script src="/js/layout.js"></script>
+<script src="/js/chatbot.js"></script>
+<script>
+const cliente = Sesion.cliente();
+if (!cliente) irALogin();
+
+const ESTADO_LABEL = { pendiente: 'Pendiente', confirmado: 'Confirmado', procesando: 'En preparación', enviado: 'Enviado', entregado: 'Entregado', cancelado: 'Cancelado' };
+
+async function cargar() {
+    const id = new URLSearchParams(location.search).get('id');
+    const wrap = document.getElementById('thanks');
+    if (!id) { location.replace('/pedidos.html'); return; }
+    try {
+        const d = await api(`/pedidos/${id}/detalle`);
+        wrap.innerHTML = `
+            <div class="thanks-check">${icon('check', 34)}</div>
+            <h1>¡Gracias por tu compra!</h1>
+            <div class="thanks-order">${d.numero_orden}</div>
+            <p style="margin-bottom:22px">Recibimos tu pedido y ya lo estamos preparando. Te avisaremos por correo cuando se envíe.</p>
+
+            <div class="card thanks-card">
+                ${d.items.map((i) => `
+                    <div class="tc-line"><span>${i.nombre} × ${i.cantidad}</span><span class="mono">${formatoMoneda(i.subtotal)}</span></div>
+                `).join('')}
+                <div class="tc-line" style="color:var(--text-muted)"><span>IVA</span><span class="mono">${formatoMoneda(d.impuestos)}</span></div>
+                <div class="tc-line" style="color:var(--text-muted)"><span>Envío</span><span class="mono">${Number(d.envio) === 0 ? 'Gratis' : formatoMoneda(d.envio)}</span></div>
+                ${Number(d.descuento) > 0 ? `<div class="tc-line" style="color:var(--success)"><span>Descuento por puntos</span><span class="mono">-${formatoMoneda(d.descuento)}</span></div>` : ''}
+                <div class="tc-line" style="font-weight:700;font-size:1.05rem"><span>Total</span><span class="mono">${formatoMoneda(d.total)}</span></div>
+                <div class="tc-line" style="color:var(--text-muted)"><span>Envío a</span><span style="text-align:right;max-width:60%">${d.direccion_envio || '—'}</span></div>
+                <div class="tc-line" style="color:var(--text-muted)"><span>Estado</span><span><span class="tag">${ESTADO_LABEL[d.estado] || d.estado}</span></span></div>
+            </div>
+
+            <p style="font-size:.86rem;color:var(--text-muted);margin:16px 0 0">Esta compra sumó puntos a tu <a href="/recompensas.html">Club de puntos</a>.</p>
+            <div class="thanks-actions">
+                <a class="btn btn-primary" href="/pedidos.html">Ver mis pedidos</a>
+                <a class="btn btn-outline" href="/index.html">Seguir comprando</a>
+            </div>
+        `;
+    } catch (e) {
+        wrap.innerHTML = `<div class="empty-state">No pudimos cargar la confirmación.<br><a href="/pedidos.html">Ir a mis pedidos</a></div>`;
+    }
+}
+if (cliente) cargar();
+</script>
+</body>
+</html>

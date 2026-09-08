@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Reportes · Admin TiendaTech</title>
+<link rel="stylesheet" href="/css/style.css" />
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+</head>
+<body class="theme-light">
+<div class="admin-shell">
+    <aside class="admin-sidebar" id="admin-sidebar-placeholder"></aside>
+    <main class="admin-main">
+        <div id="topbar"></div>
+        <div class="filters-bar">
+            <label style="align-self:center;font-size:.85rem">Del</label><input type="date" id="f-desde" />
+            <label style="align-self:center;font-size:.85rem">al</label><input type="date" id="f-hasta" />
+            <button class="btn btn-outline btn-sm" onclick="cargar()">Aplicar</button>
+            <button class="btn btn-ghost btn-sm" onclick="limpiar()">Todo el histórico</button>
+        </div>
+        <div class="stat-grid" id="stat" style="grid-template-columns:repeat(auto-fit,minmax(160px,1fr))"></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-top:8px" id="charts-wrap">
+            <div class="card"><h3>Interacciones por tipo</h3><canvas id="c-tipo" height="200"></canvas></div>
+            <div class="card"><h3>Clientes por etapa CRM</h3><canvas id="c-etapa" height="200"></canvas></div>
+        </div>
+    </main>
+</div>
+
+<script src="/js/theme.js"></script>
+<script src="/js/api.js"></script>
+<script src="/js/icons.js"></script>
+<script src="/js/toast.js"></script>
+<script src="/admin/js/admin-layout.js"></script>
+<script>
+requireAuthAdmin();
+renderAdminSidebar('reportes');
+document.getElementById('topbar').innerHTML = adminHeader('Reportes y métricas', 'Indicadores para evaluar el desempeño del CRM.');
+let chartTipo, chartEtapa;
+
+function limpiar() { document.getElementById('f-desde').value = ''; document.getElementById('f-hasta').value = ''; cargar(); }
+
+async function cargar() {
+    const d = document.getElementById('f-desde').value;
+    const h = document.getElementById('f-hasta').value;
+    const q = new URLSearchParams();
+    if (d) q.set('desde', d); if (h) q.set('hasta', h);
+    const r = await api('/admin/reportes?' + q.toString());
+
+    document.getElementById('stat').innerHTML = `
+        <div class="stat-card"><div class="stat-label">Clientes totales</div><div class="stat-value">${r.clientes.total}</div></div>
+        <div class="stat-card"><div class="stat-label">Activos</div><div class="stat-value" style="color:var(--success)">${r.clientes.activos}</div><div class="stat-sub">${r.clientes.total ? Math.round(r.clientes.activos / r.clientes.total * 100) : 0}%</div></div>
+        <div class="stat-card"><div class="stat-label">Interacciones (periodo)</div><div class="stat-value">${r.interacciones.total_periodo}</div></div>
+        <div class="stat-card"><div class="stat-label">Clientes sin interacción</div><div class="stat-value" style="color:var(--danger)">${r.clientes.sin_interaccion}</div><div class="stat-sub">30+ días</div></div>
+        <div class="stat-card"><div class="stat-label">Nuevos clientes (periodo)</div><div class="stat-value">${r.clientes.nuevos_periodo}</div></div>
+        <div class="stat-card"><div class="stat-label">Ventas (periodo)</div><div class="stat-value" style="font-size:1.2rem">${formatoMoneda(r.ventas.ingresos)}</div><div class="stat-sub">${r.ventas.pedidos} pedidos</div></div>
+    `;
+
+    if (chartTipo) chartTipo.destroy();
+    if (chartEtapa) chartEtapa.destroy();
+    const acc = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#4E6BE6';
+    chartTipo = new Chart(document.getElementById('c-tipo'), {
+        type: 'bar',
+        data: { labels: r.interacciones.por_tipo.map((x) => x.tipo),
+                datasets: [{ data: r.interacciones.por_tipo.map((x) => Number(x.total)), backgroundColor: acc }] },
+        options: { plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } },
+    });
+    chartEtapa = new Chart(document.getElementById('c-etapa'), {
+        type: 'doughnut',
+        data: { labels: r.clientes_por_etapa.map((x) => x.etapa_crm),
+                datasets: [{ data: r.clientes_por_etapa.map((x) => Number(x.total)), backgroundColor: ['#5AA9E6', '#4FC98A', '#E8944A', '#E85F5A'] }] },
+        options: { plugins: { legend: { position: 'bottom' } } },
+    });
+}
+cargar();
+</script>
+</body>
+</html>

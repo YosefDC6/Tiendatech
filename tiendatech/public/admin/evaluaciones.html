@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Evaluaciones · Admin TiendaTech</title>
+<link rel="stylesheet" href="/css/style.css" />
+</head>
+<body class="theme-light">
+<div class="admin-shell">
+    <aside class="admin-sidebar" id="admin-sidebar-placeholder"></aside>
+    <main class="admin-main">
+        <div id="topbar"></div>
+        <div class="stat-grid" id="stat" style="grid-template-columns:repeat(auto-fit,minmax(160px,1fr))"></div>
+        <div class="filters-bar">
+            <select id="f-min">
+                <option value="">Todas las calificaciones</option>
+                <option value="5">Solo 5 estrellas</option>
+                <option value="4">4 estrellas o más</option>
+                <option value="3">3 estrellas o más</option>
+                <option value="1">1 o 2 estrellas (críticas)</option>
+            </select>
+        </div>
+        <div class="table-wrap">
+            <table>
+                <thead><tr><th>Fecha</th><th>Producto</th><th>Cliente</th><th>Calificación</th><th>Comentario</th></tr></thead>
+                <tbody id="tabla"><tr><td colspan="5">Cargando…</td></tr></tbody>
+            </table>
+        </div>
+    </main>
+</div>
+
+<script src="/js/theme.js"></script>
+<script src="/js/api.js"></script>
+<script src="/js/icons.js"></script>
+<script src="/js/toast.js"></script>
+<script src="/admin/js/admin-layout.js"></script>
+<script>
+requireAuthAdmin();
+renderAdminSidebar('evaluaciones');
+document.getElementById('topbar').innerHTML = adminHeader('Evaluaciones', 'Reseñas que los clientes dejan en los productos.');
+
+function estrellas(n) { return '★'.repeat(n) + '☆'.repeat(5 - n); }
+
+async function cargar() {
+    const min = document.getElementById('f-min').value;
+    let filtro = '';
+    if (min === '1') filtro = ''; // se filtra abajo
+    else if (min) filtro = '?min=' + min;
+    const d = await api('/admin/resenas' + filtro);
+    let rows = d.resenas;
+    if (min === '1') rows = rows.filter((r) => r.calificacion <= 2);
+
+    document.getElementById('stat').innerHTML = `
+        <div class="stat-card"><div class="stat-label">Reseñas totales</div><div class="stat-value">${d.total}</div></div>
+        <div class="stat-card"><div class="stat-label">Promedio</div><div class="stat-value">${d.promedio.toFixed(2)}</div><div class="stat-sub">de 5</div></div>
+        <div class="stat-card"><div class="stat-label">Críticas (≤2)</div><div class="stat-value" style="color:var(--danger)">${d.resenas.filter((r) => r.calificacion <= 2).length}</div></div>
+    `;
+    document.getElementById('tabla').innerHTML = rows.length === 0
+        ? '<tr><td colspan="5">Sin resultados.</td></tr>'
+        : rows.map((r) => `
+            <tr>
+                <td>${formatoFecha(r.fecha)}</td>
+                <td>${r.producto_nombre}</td>
+                <td><a href="/admin/cliente.html?id=${r.cliente_id}&tab=evaluaciones">${r.cliente_nombre}</a></td>
+                <td style="color:var(--warning);letter-spacing:2px">${estrellas(r.calificacion)}</td>
+                <td>${r.comentario || '—'}</td>
+            </tr>`).join('');
+}
+document.getElementById('f-min').addEventListener('change', cargar);
+cargar();
+</script>
+</body>
+</html>

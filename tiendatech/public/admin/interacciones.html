@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Interacciones · Admin TiendaTech</title>
+<link rel="stylesheet" href="/css/style.css" />
+</head>
+<body class="theme-light">
+<div class="admin-shell">
+    <aside class="admin-sidebar" id="admin-sidebar-placeholder"></aside>
+    <main class="admin-main">
+        <div id="topbar"></div>
+        <div class="filters-bar">
+            <input type="text" id="f-busqueda" placeholder="Buscar en descripción o cliente..." />
+            <select id="f-tipo">
+                <option>Todos</option>
+                <option value="llamada">Llamada</option><option value="correo">Correo</option>
+                <option value="reunion">Reunión</option><option value="chat">Chat</option><option value="soporte">Soporte</option>
+            </select>
+            <input type="date" id="f-desde" title="Desde" />
+            <input type="date" id="f-hasta" title="Hasta" />
+        </div>
+        <div class="toolbar"><span class="result-count" id="conteo">&nbsp;</span></div>
+        <div class="table-wrap">
+            <table>
+                <thead><tr><th>Fecha</th><th>Cliente</th><th>Tipo</th><th>Descripción</th><th>Registró</th></tr></thead>
+                <tbody id="tabla"><tr><td colspan="5">Cargando…</td></tr></tbody>
+            </table>
+        </div>
+    </main>
+</div>
+
+<div class="modal-overlay" id="modal"><div class="modal" id="modal-body"></div></div>
+
+<script src="/js/theme.js"></script>
+<script src="/js/api.js"></script>
+<script src="/js/icons.js"></script>
+<script src="/js/toast.js"></script>
+<script src="/admin/js/admin-layout.js"></script>
+<script>
+requireAuthAdmin();
+renderAdminSidebar('interacciones');
+document.getElementById('topbar').innerHTML = adminHeader(
+    'Interacciones', 'Todas las interacciones con clientes (llamadas, correos, reuniones, chat y soporte).',
+    '<button class="btn btn-primary" onclick="nueva()">Nueva interacción</button>'
+);
+
+async function cargar() {
+    const q = new URLSearchParams();
+    const b = document.getElementById('f-busqueda').value.trim();
+    const t = document.getElementById('f-tipo').value;
+    const d = document.getElementById('f-desde').value;
+    const h = document.getElementById('f-hasta').value;
+    if (b) q.set('busqueda', b);
+    if (t && t !== 'Todos') q.set('tipo', t);
+    if (d) q.set('desde', d);
+    if (h) q.set('hasta', h);
+    const rows = await api('/admin/interacciones?' + q.toString());
+    document.getElementById('conteo').textContent = `${rows.length} interacción(es)`;
+    document.getElementById('tabla').innerHTML = rows.length === 0
+        ? '<tr><td colspan="5">Sin resultados.</td></tr>'
+        : rows.map((i) => `
+            <tr>
+                <td>${formatoFecha(i.fecha)}</td>
+                <td><a href="/admin/cliente.html?id=${i.cliente_id}&tab=interacciones">${i.cliente_nombre}</a></td>
+                <td style="text-transform:capitalize">${i.tipo}</td>
+                <td>${i.descripcion}</td>
+                <td>${i.usuario_nombre || '—'}</td>
+            </tr>`).join('');
+}
+
+async function nueva() {
+    const clientes = await api('/admin/clientes');
+    document.getElementById('modal-body').innerHTML = `
+        <button class="modal-close" onclick="document.getElementById('modal').classList.remove('open')">${icon('x', 20)}</button>
+        <h3>Registrar interacción</h3>
+        <div class="field"><label>Cliente</label>
+            <select id="ni-cliente">${clientes.map((c) => `<option value="${c.id}">${c.nombre} — ${c.correo}</option>`).join('')}</select>
+        </div>
+        <div class="field"><label>Tipo</label>
+            <select id="ni-tipo">
+                <option value="llamada">Llamada</option><option value="correo">Correo</option>
+                <option value="reunion">Reunión</option><option value="soporte">Soporte</option>
+            </select>
+        </div>
+        <div class="field"><label>Descripción</label><textarea id="ni-desc" rows="3"></textarea></div>
+        <button class="btn btn-primary" style="width:100%" onclick="guardar()">Guardar</button>
+    `;
+    document.getElementById('modal').classList.add('open');
+}
+async function guardar() {
+    const descripcion = document.getElementById('ni-desc').value.trim();
+    if (!descripcion) { toast('Escribe una descripción', 'warn'); return; }
+    try {
+        await api('/admin/interacciones', { method: 'POST', body: {
+            cliente_id: Number(document.getElementById('ni-cliente').value),
+            tipo: document.getElementById('ni-tipo').value, descripcion,
+        }});
+        document.getElementById('modal').classList.remove('open');
+        toast('Interacción registrada', 'ok'); cargar();
+    } catch (e) { toast(e.message, 'error'); }
+}
+
+['f-tipo', 'f-desde', 'f-hasta'].forEach((id) => document.getElementById(id).addEventListener('change', cargar));
+document.getElementById('f-busqueda').addEventListener('keydown', (e) => { if (e.key === 'Enter') cargar(); });
+cargar();
+</script>
+</body>
+</html>

@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Iniciar sesión · TiendaTech</title>
+<link rel="stylesheet" href="/css/style.css" />
+</head>
+<body>
+<div id="navbar-placeholder"></div>
+
+<div class="auth-wrap">
+    <div class="page-hero">
+        <div class="hero-badge" data-ic="user" data-ic-size="28"></div>
+        <h1 id="auth-title">Bienvenido</h1>
+        <p id="auth-sub">Accede a tu cuenta de TiendaTech para ver pedidos, favoritos y recomendaciones.</p>
+    </div>
+
+    <!-- Ya hay sesión iniciada -->
+    <div class="card" id="ya-sesion" hidden>
+        <p style="text-align:center;color:var(--text)">Ya iniciaste sesión como <strong id="ya-nombre"></strong>.</p>
+        <a class="btn btn-primary" style="width:100%;margin-bottom:10px" href="/perfil.html">Ir a mi perfil</a>
+        <button class="btn btn-outline" style="width:100%" id="btn-otra">Usar otra cuenta</button>
+    </div>
+
+    <!-- Formulario de acceso -->
+    <div class="card" id="form-card">
+        <form id="form-login">
+            <div class="field">
+                <label>Correo electrónico</label>
+                <input type="email" id="correo" required placeholder="tucorreo@ejemplo.com" autocomplete="email" />
+            </div>
+            <div class="field">
+                <label>Contraseña</label>
+                <div style="display:flex;gap:8px">
+                    <input type="password" id="password" required placeholder="••••••••" autocomplete="current-password" />
+                    <button type="button" class="btn btn-outline btn-sm" id="toggle-pass" aria-label="Mostrar u ocultar contraseña" data-ic="eye" data-ic-size="16"></button>
+                </div>
+            </div>
+            <div id="login-error" style="color:var(--danger);font-size:.85rem;margin-bottom:12px;display:none"></div>
+            <button class="btn btn-primary" style="width:100%" type="submit">Entrar</button>
+        </form>
+        <p style="margin-top:16px;text-align:center">¿No tienes cuenta? <a href="/registro.html">Crear cuenta</a></p>
+        <p style="text-align:center;font-size:.78rem;color:var(--text-muted)">Demo: mariana@correo.com / demo123</p>
+    </div>
+</div>
+
+<div id="footer-placeholder"></div>
+<script src="/js/theme.js"></script>
+<script src="/js/api.js"></script>
+<script src="/js/icons.js"></script>
+<script src="/js/toast.js"></script>
+<script src="/js/layout.js"></script>
+<script>
+function destinoNext() {
+    const n = new URLSearchParams(location.search).get('next');
+    if (n && n.startsWith('/') && !n.startsWith('//')) return n;
+    return '/perfil.html';
+}
+
+// Si ya hay sesión, no autoenviamos a ningún lado: mostramos el estado
+// y dejamos que la persona decida.
+const sesion = Sesion.cliente();
+if (sesion) {
+    document.getElementById('form-card').hidden = true;
+    document.getElementById('ya-sesion').hidden = false;
+    document.getElementById('auth-title').textContent = 'Ya tienes sesión';
+    document.getElementById('auth-sub').textContent = 'Continúa a tu perfil o entra con otra cuenta.';
+    document.getElementById('ya-nombre').textContent = sesion.nombre;
+    document.getElementById('btn-otra').addEventListener('click', () => {
+        Sesion.cerrarSesionCliente();
+        location.reload();
+    });
+}
+
+document.getElementById('toggle-pass').addEventListener('click', () => {
+    const i = document.getElementById('password');
+    i.type = i.type === 'password' ? 'text' : 'password';
+});
+
+document.getElementById('form-login').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const correo = document.getElementById('correo').value;
+    const password = document.getElementById('password').value;
+    const errorBox = document.getElementById('login-error');
+    errorBox.style.display = 'none';
+    try {
+        const data = await api('/auth/login-cliente', { method: 'POST', body: { correo, password } });
+        Sesion.guardarCliente(data.cliente, data.token);
+        toast('Bienvenido de vuelta', 'ok');
+        setTimeout(() => location.href = destinoNext(), 400);
+    } catch (err) {
+        errorBox.textContent = err.message;
+        errorBox.style.display = 'block';
+    }
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Dashboard · Admin TiendaTech</title>
+<link rel="stylesheet" href="/css/style.css" />
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+</head>
+<body class="theme-light">
+<div class="admin-shell">
+    <aside class="admin-sidebar" id="admin-sidebar-placeholder"></aside>
+    <main class="admin-main">
+        <div id="topbar"></div>
+
+        <div class="stat-grid" id="stat-grid"></div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-bottom:22px">
+            <div class="card">
+                <h3>Clientes por etapa CRM</h3>
+                <canvas id="chart-etapas" height="200"></canvas>
+            </div>
+            <div class="card">
+                <h3>Interacciones por tipo</h3>
+                <canvas id="chart-interacciones" height="200"></canvas>
+            </div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px">
+            <div class="card">
+                <h3>Clientes en riesgo (sin interacción reciente)</h3>
+                <p>Más de 30 días sin contacto registrado.</p>
+                <div class="table-wrap">
+                    <table>
+                        <thead><tr><th>Cliente</th><th>Días</th><th></th></tr></thead>
+                        <tbody id="tabla-riesgo"><tr><td colspan="3">Cargando…</td></tr></tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="card">
+                <h3>Productos más vendidos</h3>
+                <p>Unidades acumuladas en pedidos.</p>
+                <div class="table-wrap">
+                    <table>
+                        <thead><tr><th>Producto</th><th>Vendidas</th><th>Stock</th></tr></thead>
+                        <tbody id="tabla-vendidos"><tr><td colspan="3">Cargando…</td></tr></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </main>
+</div>
+
+<script src="/js/theme.js"></script>
+<script src="/js/api.js"></script>
+<script src="/js/icons.js"></script>
+<script src="/js/toast.js"></script>
+<script src="/admin/js/admin-layout.js"></script>
+<script>
+requireAuthAdmin();
+renderAdminSidebar('dashboard');
+document.getElementById('topbar').innerHTML = adminHeader('Resumen CRM', 'Vista general de clientes, interacciones, soporte e inventario.');
+
+async function cargarDashboard() {
+    const [d, mp] = await Promise.all([api('/admin/dashboard'), api('/admin/metricas-productos')]);
+
+    document.getElementById('stat-grid').innerHTML = `
+        <div class="stat-card"><div class="stat-label">Total de clientes</div><div class="stat-value">${d.total_clientes}</div></div>
+        <div class="stat-card"><div class="stat-label">Clientes activos</div><div class="stat-value">${d.activos}</div><div class="stat-sub">${d.total_clientes ? Math.round(d.activos / d.total_clientes * 100) : 0}% del total</div></div>
+        <div class="stat-card"><div class="stat-label">Interacciones (este mes)</div><div class="stat-value">${d.interacciones_mes}</div></div>
+        <div class="stat-card"><div class="stat-label">Tickets de soporte activos</div><div class="stat-value" style="color:var(--warning)">${d.tickets_activos || 0}</div><div class="stat-sub">${d.tickets_abiertos || 0} sin abrir</div></div>
+        <div class="stat-card"><div class="stat-label">Productos con stock crítico</div><div class="stat-value" style="color:var(--danger)">${mp.stats.criticos}</div><div class="stat-sub">${mp.stats.agotados} agotados</div></div>
+    `;
+
+    new Chart(document.getElementById('chart-etapas'), {
+        type: 'doughnut',
+        data: {
+            labels: d.clientes_por_etapa.map((e) => e.etapa_crm),
+            datasets: [{ data: d.clientes_por_etapa.map((e) => e.total), backgroundColor: ['#6C9BC9', '#6FAE8C', '#B8672E', '#C1584A'] }]
+        },
+        options: { plugins: { legend: { position: 'bottom' } } }
+    });
+
+    new Chart(document.getElementById('chart-interacciones'), {
+        type: 'bar',
+        data: {
+            labels: d.interacciones_por_tipo.map((t) => t.tipo),
+            datasets: [{ data: d.interacciones_por_tipo.map((t) => t.total), backgroundColor: '#B8672E' }]
+        },
+        options: { plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } }
+    });
+
+    const tbody = document.getElementById('tabla-riesgo');
+    tbody.innerHTML = d.clientes_sin_interaccion.length === 0
+        ? '<tr><td colspan="3">No hay clientes en riesgo por ahora.</td></tr>'
+        : d.clientes_sin_interaccion.map((c) => `
+            <tr>
+                <td>${c.nombre}<div style="color:var(--text-muted);font-size:.78rem">${c.correo}</div></td>
+                <td class="mono">${c.dias_sin_contacto}</td>
+                <td><a href="/admin/cliente.html?id=${c.id}">Ver</a></td>
+            </tr>
+        `).join('');
+
+    const tv = document.getElementById('tabla-vendidos');
+    const vendidos = (mp.mas_vendidos || []).filter((p) => Number(p.unidades_vendidas) > 0);
+    tv.innerHTML = vendidos.length === 0
+        ? '<tr><td colspan="3">Todavía no hay ventas registradas.</td></tr>'
+        : vendidos.map((p) => `
+            <tr>
+                <td>${p.nombre}<div style="color:var(--text-muted);font-size:.78rem">${p.marca || ''}</div></td>
+                <td class="mono">${p.unidades_vendidas}</td>
+                <td class="mono ${p.stock === 0 ? 'stock-out' : p.stock <= 5 ? 'stock-low' : 'stock-ok'}">${p.stock}</td>
+            </tr>
+        `).join('');
+}
+cargarDashboard();
+</script>
+</body>
+</html>

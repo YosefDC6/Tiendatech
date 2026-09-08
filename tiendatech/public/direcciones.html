@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Direcciones · TiendaTech</title>
+<link rel="stylesheet" href="/css/style.css" />
+</head>
+<body>
+<div id="navbar-placeholder"></div>
+
+<div class="cuenta-shell">
+    <nav class="cuenta-nav" id="cuenta-nav"></nav>
+    <main class="cuenta-panel" id="cuenta-panel"><div class="empty-state">Cargando…</div></main>
+</div>
+
+<div id="footer-placeholder"></div>
+<div class="modal-overlay" id="modal-generico"><div class="modal" id="modal-generico-body"></div></div>
+
+<script src="/js/theme.js"></script>
+<script src="/js/api.js"></script>
+<script src="/js/icons.js"></script>
+<script src="/js/toast.js"></script>
+<script src="/js/layout.js"></script>
+<script src="/js/chatbot.js"></script>
+<script src="/js/cuenta.js"></script>
+<script>
+let CID = null;
+
+montarCuenta('direcciones', async (panel, P) => {
+    CID = P.id;
+    await pintarDirecciones(panel);
+});
+
+async function pintarDirecciones(panel) {
+    const dirs = await api(`/clientes/${CID}/direcciones`);
+    panel.innerHTML = `
+        <div class="cuenta-head" style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px">
+            <div><h1>Direcciones</h1><p>Se usan al momento de comprar.</p></div>
+            <button class="btn btn-primary btn-sm" onclick="formDireccion()">Nueva dirección</button>
+        </div>
+        <div id="lista-dirs">
+        ${dirs.length === 0 ? '<div class="empty-state">No tienes direcciones guardadas.</div>' : dirs.map((d) => `
+            <div class="addr-card ${d.predeterminada ? 'is-default' : ''}">
+                <div class="addr-alias">${d.alias || 'Dirección'} ${d.predeterminada ? '<span class="tag" style="color:var(--accent-light);border-color:var(--accent)">Predeterminada</span>' : ''}</div>
+                <div class="addr-body">${d.destinatario ? d.destinatario + '<br>' : ''}${d.calle}<br>${[d.ciudad, d.estado, d.codigo_postal].filter(Boolean).join(', ')}${d.telefono ? '<br>Tel: ' + d.telefono : ''}</div>
+                <div class="addr-actions">
+                    ${d.predeterminada ? '' : `<button class="btn btn-ghost btn-sm" onclick="hacerPredet(${d.id})">Hacer predeterminada</button>`}
+                    <button class="btn btn-outline btn-sm" onclick='formDireccion(${JSON.stringify(d).replace(/'/g, "&#39;")})'>Editar</button>
+                    <button class="btn btn-ghost btn-sm" onclick="borrarDireccion(${d.id})">Eliminar</button>
+                </div>
+            </div>
+        `).join('')}
+        </div>`;
+}
+function refrescar() { pintarDirecciones(document.getElementById('cuenta-panel')); }
+
+function formDireccion(d = {}) {
+    document.getElementById('modal-generico-body').innerHTML = `
+        <button class="modal-close" onclick="document.getElementById('modal-generico').classList.remove('open')">${icon('x', 20)}</button>
+        <h3>${d.id ? 'Editar' : 'Nueva'} dirección</h3>
+        <div class="field-row">
+            <div class="field"><label>Alias</label><input id="da-alias" value="${d.alias || ''}" placeholder="Casa, Oficina…" /></div>
+            <div class="field"><label>Destinatario</label><input id="da-dest" value="${d.destinatario || ''}" /></div>
+        </div>
+        <div class="field"><label>Calle, número y colonia</label><input id="da-calle" value="${d.calle || ''}" /></div>
+        <div class="field-row">
+            <div class="field"><label>Ciudad</label><input id="da-ciudad" value="${d.ciudad || ''}" /></div>
+            <div class="field"><label>Estado</label><input id="da-estado" value="${d.estado || ''}" /></div>
+        </div>
+        <div class="field-row">
+            <div class="field"><label>Código postal</label><input id="da-cp" value="${d.codigo_postal || ''}" /></div>
+            <div class="field"><label>Teléfono</label><input id="da-tel" value="${d.telefono || ''}" /></div>
+        </div>
+        <div class="field"><label>Referencias</label><input id="da-ref" value="${d.referencias || ''}" placeholder="Entre calles, color de casa…" /></div>
+        <label style="display:flex;align-items:center;gap:8px;margin-bottom:14px"><input type="checkbox" id="da-predet" style="width:auto" ${d.predeterminada ? 'checked' : ''}/> Usar como predeterminada</label>
+        <button class="btn btn-primary" style="width:100%" onclick="guardarDireccion(${d.id || 0})">Guardar</button>
+    `;
+    document.getElementById('modal-generico').classList.add('open');
+}
+
+async function guardarDireccion(id) {
+    const body = {
+        alias: val('da-alias'), destinatario: val('da-dest'), calle: val('da-calle'),
+        ciudad: val('da-ciudad'), estado: val('da-estado'), codigo_postal: val('da-cp'),
+        telefono: val('da-tel'), referencias: val('da-ref'),
+        predeterminada: document.getElementById('da-predet').checked,
+    };
+    if (!body.calle) { toast('La calle y número son obligatorios', 'warn'); return; }
+    try {
+        if (id) await api(`/clientes/${CID}/direcciones/${id}`, { method: 'PUT', body });
+        else await api(`/clientes/${CID}/direcciones`, { method: 'POST', body });
+        document.getElementById('modal-generico').classList.remove('open');
+        toast('Dirección guardada', 'ok');
+        refrescar();
+    } catch (e) { toast(e.message, 'error'); }
+}
+async function hacerPredet(id) {
+    try { await api(`/clientes/${CID}/direcciones/${id}`, { method: 'PUT', body: { predeterminada: true } }); refrescar(); }
+    catch (e) { toast(e.message, 'error'); }
+}
+async function borrarDireccion(id) {
+    if (!(await confirmar('¿Eliminar esta dirección?', { okText: 'Eliminar', peligro: true }))) return;
+    try { await api(`/clientes/${CID}/direcciones/${id}`, { method: 'DELETE' }); toast('Dirección eliminada', 'ok'); refrescar(); }
+    catch (e) { toast(e.message, 'error'); }
+}
+</script>
+</body>
+</html>

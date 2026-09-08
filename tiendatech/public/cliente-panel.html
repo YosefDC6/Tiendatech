@@ -1,0 +1,15 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Mi cuenta · TiendaTech</title>
+<script>
+(function () {
+    var qs = new URLSearchParams(location.search);
+    location.replace(qs.get('pedido') ? '/pedidos.html' : '/perfil.html');
+})();
+</script>
+</head>
+<body><p style="font-family:sans-serif;padding:24px">Redirigiendo a <a href="/perfil.html">tu cuenta</a>…</p></body>
+</html>

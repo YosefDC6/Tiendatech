@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Acceso interno · TiendaTech</title>
+<link rel="stylesheet" href="/css/style.css" />
+</head>
+<body class="theme-light" style="display:flex;align-items:center;justify-content:center;min-height:100vh">
+<div class="container" style="max-width:400px">
+    <div style="text-align:center;margin-bottom:20px">
+        <span class="brand-mark" style="display:inline-flex;width:44px;height:44px" data-ic="bolt" data-ic-size="20"></span>
+        <h2 style="margin-top:12px">Acceso equipo interno</h2>
+        <p>Panel de administración y ventas de TiendaTech.</p>
+    </div>
+    <div class="card">
+        <form id="form-login-admin">
+            <div class="field"><label>Correo</label><input type="email" id="email" required /></div>
+            <div class="field"><label>Contraseña</label><input type="password" id="password" required /></div>
+            <div id="login-error" style="color:var(--danger);font-size:.85rem;margin-bottom:12px;display:none"></div>
+            <button class="btn btn-primary" style="width:100%" type="submit">Entrar</button>
+        </form>
+        <p style="text-align:center;font-size:.78rem;margin-top:14px">Demo admin: admin@tiendatech.mx / admin123</p>
+    </div>
+    <p style="text-align:center;margin-top:16px"><a href="/index.html">Volver a la tienda</a></p>
+</div>
+<script src="/js/theme.js"></script>
+<script src="/js/api.js"></script>
+<script src="/js/icons.js"></script>
+<script>
+document.getElementById('form-login-admin').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const email = document.getElementById('email').value;
+    const password = document.getElementById('password').value;
+    const errorBox = document.getElementById('login-error');
+    errorBox.style.display = 'none';
+    try {
+        const data = await api('/auth/login-usuario', { method: 'POST', body: { email, password } });
+        Sesion.guardarUsuario(data.usuario, data.token);
+        window.location.href = '/admin/dashboard.html';
+    } catch (err) {
+        errorBox.textContent = err.message;
+        errorBox.style.display = 'block';
+    }
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Configuración · Admin TiendaTech</title>
+<link rel="stylesheet" href="/css/style.css" />
+</head>
+<body class="theme-light">
+<div class="admin-shell">
+    <aside class="admin-sidebar" id="admin-sidebar-placeholder"></aside>
+    <main class="admin-main">
+        <div id="topbar"></div>
+
+        <div class="card" style="max-width:640px;margin-bottom:16px">
+            <h3 style="margin-top:0">Apariencia</h3>
+            <p style="color:var(--text-muted);font-size:.88rem">El tema se aplica a toda la plataforma (tienda y panel) y se guarda en tu navegador.</p>
+            <div class="tema-swatches" id="tema-swatches"></div>
+        </div>
+
+        <div class="card" style="max-width:640px;margin-bottom:16px">
+            <h3 style="margin-top:0">Etapas del CRM</h3>
+            <p style="color:var(--text-muted);font-size:.88rem">El embudo de seguimiento de clientes.</p>
+            <div style="display:flex;gap:8px;flex-wrap:wrap">
+                <span class="tag tag-etapa-Prospecto">Prospecto</span>
+                <span class="tag tag-etapa-Activo">Activo</span>
+                <span class="tag tag-etapa-Frecuente">Frecuente</span>
+                <span class="tag tag-etapa-Inactivo">Inactivo</span>
+            </div>
+            <p style="color:var(--text-muted);font-size:.82rem;margin:10px 0 0">Un cliente pasa a <strong>Activo</strong> automáticamente al confirmar su primera compra.</p>
+        </div>
+
+        <div class="card" style="max-width:640px;margin-bottom:16px">
+            <h3 style="margin-top:0">Club de puntos</h3>
+            <ul style="margin:0;padding-left:18px;color:var(--text-muted);font-size:.88rem;line-height:1.9">
+                <li>100 puntos = $10 de descuento.</li>
+                <li>Se ganan al confirmar un pedido: <code>subtotal / 20 × multiplicador del nivel</code>.</li>
+                <li>Niveles: Bronce (x1), Plata (x1.15), Oro (x1.3), Platino (x1.6).</li>
+                <li>El nivel sube por gasto total o por número de compras.</li>
+            </ul>
+        </div>
+
+        <div class="card" style="max-width:640px">
+            <h3 style="margin-top:0">Acerca de</h3>
+            <p style="color:var(--text-muted);font-size:.88rem;margin:0">
+                TiendaTech CRM · Node/Express + PostgreSQL. Panel para gestión de clientes,
+                interacciones, evaluaciones, soporte, inventario y ventas.
+            </p>
+        </div>
+    </main>
+</div>
+
+<script src="/js/theme.js"></script>
+<script src="/js/api.js"></script>
+<script src="/js/icons.js"></script>
+<script src="/js/toast.js"></script>
+<script src="/admin/js/admin-layout.js"></script>
+<script>
+requireAuthAdmin();
+renderAdminSidebar('configuracion');
+document.getElementById('topbar').innerHTML = adminHeader('Configuración', 'Preferencias del panel.');
+
+function pintarTemas() {
+    const cont = document.getElementById('tema-swatches');
+    const actual = Tema.actual();
+    cont.innerHTML = Tema.lista.map((t) => `
+        <button class="tema-swatch ${t.clave === actual ? 'sel' : ''}" data-tema="${t.clave}">
+            <span class="ts-color" data-c="${t.clave}"></span>${t.nombre}
+        </button>`).join('');
+    cont.querySelectorAll('.tema-swatch').forEach((b) =>
+        b.addEventListener('click', () => { Tema.aplicar(b.dataset.tema); pintarTemas(); toast('Tema aplicado', 'ok'); }));
+}
+pintarTemas();
+</script>
+</body>
+</html>

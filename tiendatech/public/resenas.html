@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Mis reseñas · TiendaTech</title>
+<link rel="stylesheet" href="/css/style.css" />
+</head>
+<body>
+<div id="navbar-placeholder"></div>
+
+<div class="cuenta-shell">
+    <nav class="cuenta-nav" id="cuenta-nav"></nav>
+    <main class="cuenta-panel" id="cuenta-panel"><div class="empty-state">Cargando…</div></main>
+</div>
+
+<div id="footer-placeholder"></div>
+
+<script src="/js/theme.js"></script>
+<script src="/js/api.js"></script>
+<script src="/js/icons.js"></script>
+<script src="/js/toast.js"></script>
+<script src="/js/layout.js"></script>
+<script src="/js/chatbot.js"></script>
+<script src="/js/cuenta.js"></script>
+<script>
+let CID = null;
+function estrellas(n) {
+    let s = '';
+    for (let i = 1; i <= 5; i++) s += `<span class="star ${i <= n ? 'on' : ''}">${icon('star', 16)}</span>`;
+    return `<span class="stars">${s}</span>`;
+}
+
+montarCuenta('resenas', async (panel, P) => {
+    CID = P.id;
+    const list = await api(`/clientes/${P.id}/resenas`);
+    panel.innerHTML = `
+        <div class="cuenta-head"><h1>Mis reseñas</h1><p>Lo que has calificado en la tienda.</p></div>
+        ${list.length === 0
+            ? '<div class="empty-state">Todavía no has dejado reseñas.<br>Abre un producto y usa "Escribir reseña".</div>'
+            : list.map((r) => `
+                <div class="card" style="margin-bottom:12px">
+                    <div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap">
+                        <div>
+                            <a href="/index.html#producto-${r.producto_id}" style="font-weight:600">${r.producto_nombre}</a>
+                            <div style="margin-top:4px">${estrellas(r.calificacion)}</div>
+                        </div>
+                        <span style="font-size:.8rem;color:var(--text-muted)">${formatoFecha(r.fecha)}</span>
+                    </div>
+                    ${r.comentario ? `<p style="margin:10px 0 0">${r.comentario}</p>` : ''}
+                    <div style="margin-top:10px;display:flex;gap:8px">
+                        <a class="btn btn-outline btn-sm" href="/index.html#producto-${r.producto_id}">Editar</a>
+                        <button class="btn btn-ghost btn-sm" onclick="borrarResena(${r.producto_id})">Eliminar</button>
+                    </div>
+                </div>
+            `).join('')}
+    `;
+});
+
+async function borrarResena(pid) {
+    if (!(await confirmar('¿Eliminar esta reseña?', { okText: 'Eliminar', peligro: true }))) return;
+    try {
+        await api(`/clientes/${CID}/resenas/${pid}`, { method: 'DELETE' });
+        toast('Reseña eliminada', 'ok');
+        setTimeout(() => location.reload(), 400);
+    } catch (e) { toast(e.message, 'error'); }
+}
+</script>
+</body>
+</html>

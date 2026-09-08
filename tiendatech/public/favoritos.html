@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Favoritos · TiendaTech</title>
+<link rel="stylesheet" href="/css/style.css" />
+</head>
+<body>
+<div id="navbar-placeholder"></div>
+
+<div class="cuenta-shell">
+    <nav class="cuenta-nav" id="cuenta-nav"></nav>
+    <main class="cuenta-panel" id="cuenta-panel"><div class="empty-state">Cargando…</div></main>
+</div>
+
+<div id="footer-placeholder"></div>
+
+<script src="/js/theme.js"></script>
+<script src="/js/api.js"></script>
+<script src="/js/icons.js"></script>
+<script src="/js/toast.js"></script>
+<script src="/js/layout.js"></script>
+<script src="/js/chatbot.js"></script>
+<script src="/js/cuenta.js"></script>
+<script>
+let CID = null;
+
+montarCuenta('favoritos', async (panel, P) => {
+    CID = P.id;
+    const favs = await api(`/clientes/${P.id}/favoritos`);
+    if (favs.length === 0) {
+        panel.innerHTML = `<div class="cuenta-head"><h1>Favoritos</h1></div>
+            <div class="empty-state">No has guardado productos.<br>Usa el corazón en cualquier producto para guardarlo aquí.</div>`;
+        return;
+    }
+    panel.innerHTML = `<div class="cuenta-head"><h1>Favoritos</h1><p>${favs.length} producto(s) guardados.</p></div>
+        <div class="grid-products" style="grid-template-columns:repeat(auto-fill,minmax(190px,1fr))">
+        ${favs.map((p) => `
+            <div class="product-card">
+                <button class="fav-btn on" title="Quitar de favoritos" onclick="quitarFav(${p.id})">${icon('heart', 16)}</button>
+                <img src="${p.imagen_url || ''}" alt="${p.nombre}" onerror="this.style.opacity=.3" onclick="location.href='/index.html#producto-${p.id}'" style="cursor:pointer" />
+                <div class="product-body">
+                    <span class="product-brand">${p.marca || ''}</span>
+                    <span class="product-name">${p.nombre}</span>
+                    <span class="product-price">${formatoMoneda(p.precio)}</span>
+                    <div class="card-actions">
+                        <button class="btn btn-primary btn-sm" ${p.stock === 0 ? 'disabled' : ''} onclick="favAlCarrito(${p.id})">${p.stock === 0 ? 'Sin stock' : 'Agregar al carrito'}</button>
+                    </div>
+                </div>
+            </div>
+        `).join('')}
+        </div>`;
+});
+
+async function quitarFav(pid) {
+    try {
+        await api(`/clientes/${CID}/favoritos/${pid}`, { method: 'DELETE' });
+        toast('Quitado de favoritos', 'ok');
+        actualizarBadgeFavoritos();
+        setTimeout(() => location.reload(), 400);
+    } catch (e) { toast(e.message, 'error'); }
+}
+async function favAlCarrito(pid) {
+    try {
+        await api('/carrito', { method: 'POST', body: { producto_id: pid, cantidad: 1 } });
+        toast('Agregado al carrito', 'ok');
+        actualizarBadgeCarrito();
+    } catch (e) { toast(e.message, 'error'); }
+}
+</script>
+</body>
+</html>

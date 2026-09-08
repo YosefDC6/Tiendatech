@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Clientes · Admin TiendaTech</title>
+<link rel="stylesheet" href="/css/style.css" />
+</head>
+<body class="theme-light">
+<div class="admin-shell">
+    <aside class="admin-sidebar" id="admin-sidebar-placeholder"></aside>
+    <main class="admin-main">
+        <div id="topbar"></div>
+
+        <div class="filters-bar">
+            <input type="text" id="f-busqueda" placeholder="Buscar por nombre, correo o empresa..." />
+            <select id="f-etapa">
+                <option>Todas</option>
+                <option>Prospecto</option><option>Activo</option><option>Frecuente</option><option>Inactivo</option>
+            </select>
+        </div>
+
+        <div class="toolbar"><span class="result-count" id="conteo">&nbsp;</span></div>
+
+        <div class="table-wrap">
+            <table>
+                <thead><tr><th>ID</th><th>Nombre</th><th>Correo</th><th>Empresa</th><th>Etapa CRM</th><th>Estado</th><th></th></tr></thead>
+                <tbody id="tabla-clientes"><tr><td colspan="7">Cargando…</td></tr></tbody>
+            </table>
+        </div>
+    </main>
+</div>
+
+<div class="modal-overlay" id="modal"><div class="modal" id="modal-body"></div></div>
+
+<script src="/js/theme.js"></script>
+<script src="/js/api.js"></script>
+<script src="/js/icons.js"></script>
+<script src="/js/toast.js"></script>
+<script src="/admin/js/admin-layout.js"></script>
+<script>
+requireAuthAdmin();
+renderAdminSidebar('clientes');
+document.getElementById('topbar').innerHTML = adminHeader(
+    'Clientes', 'Listado, búsqueda y filtro por etapa. Abre un cliente para ver su ficha completa.',
+    '<button class="btn btn-primary" onclick="formNuevo()">Nuevo cliente</button>'
+);
+
+let ROWS = [];
+async function cargar() {
+    const params = new URLSearchParams();
+    const busqueda = document.getElementById('f-busqueda').value.trim();
+    const etapa = document.getElementById('f-etapa').value;
+    if (busqueda) params.set('busqueda', busqueda);
+    if (etapa) params.set('etapa', etapa);
+    ROWS = await api('/admin/clientes?' + params.toString());
+    document.getElementById('conteo').textContent = `${ROWS.length} cliente(s)`;
+    document.getElementById('tabla-clientes').innerHTML = ROWS.length === 0
+        ? '<tr><td colspan="7">Sin resultados.</td></tr>'
+        : ROWS.map((c) => `
+            <tr onclick="location.href='/admin/cliente.html?id=${c.id}'" style="cursor:pointer">
+                <td class="mono">${c.id}</td><td>${c.nombre}</td><td>${c.correo}</td><td>${c.empresa || '—'}</td>
+                <td><span class="tag tag-etapa-${c.etapa_crm}">${c.etapa_crm}</span></td>
+                <td style="text-transform:capitalize">${c.estado_cliente}</td>
+                <td><a class="btn btn-outline btn-sm" href="/admin/cliente.html?id=${c.id}">Ver ficha</a></td>
+            </tr>`).join('');
+}
+
+function formNuevo() {
+    document.getElementById('modal-body').innerHTML = `
+        <button class="modal-close" onclick="document.getElementById('modal').classList.remove('open')">${icon('x', 20)}</button>
+        <h3>Nuevo cliente</h3>
+        <p style="font-size:.85rem;color:var(--text-muted)">Se crea con una contraseña temporal; el cliente la cambia al ingresar.</p>
+        <div class="field"><label>Nombre completo</label><input id="n-nombre" /></div>
+        <div class="field"><label>Correo</label><input type="email" id="n-correo" /></div>
+        <div class="field-row">
+            <div class="field"><label>Teléfono</label><input id="n-tel" /></div>
+            <div class="field"><label>Empresa</label><input id="n-empresa" /></div>
+        </div>
+        <div id="n-err" style="color:var(--danger);font-size:.85rem;margin-bottom:10px;display:none"></div>
+        <button class="btn btn-primary" style="width:100%" onclick="crearCliente()">Crear cliente</button>
+    `;
+    document.getElementById('modal').classList.add('open');
+}
+async function crearCliente() {
+    const err = document.getElementById('n-err'); err.style.display = 'none';
+    try {
+        const r = await api('/auth/registro-cliente', { method: 'POST', body: {
+            nombre: v('n-nombre'), correo: v('n-correo'), password: 'temporal123',
+            telefono: v('n-tel'), empresa: v('n-empresa'),
+        }});
+        document.getElementById('modal').classList.remove('open');
+        toast('Cliente creado', 'ok');
+        location.href = '/admin/cliente.html?id=' + r.cliente.id;
+    } catch (e) { err.textContent = e.message; err.style.display = 'block'; }
+}
+
+const v = (id) => document.getElementById(id).value.trim();
+document.getElementById('f-busqueda').addEventListener('keydown', (e) => { if (e.key === 'Enter') cargar(); });
+document.getElementById('f-etapa').addEventListener('change', cargar);
+cargar();
+</script>
+</body>
+</html>

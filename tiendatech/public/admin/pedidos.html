@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Pedidos · Admin TiendaTech</title>
+<link rel="stylesheet" href="/css/style.css" />
+</head>
+<body class="theme-light">
+<div class="admin-shell">
+    <aside class="admin-sidebar" id="admin-sidebar-placeholder"></aside>
+    <main class="admin-main">
+        <div id="topbar"></div>
+
+        <div class="filters-bar">
+            <select id="f-estado">
+                <option>Todos</option>
+                <option value="pendiente">Pendiente</option><option value="confirmado">Confirmado</option>
+                <option value="procesando">Procesando</option><option value="enviado">Enviado</option>
+                <option value="entregado">Entregado</option><option value="cancelado">Cancelado</option>
+            </select>
+        </div>
+
+        <div class="table-wrap">
+            <table>
+                <thead><tr><th>Orden</th><th>Cliente</th><th>Fecha</th><th>Total</th><th>Estado</th><th>Actualizar</th><th></th></tr></thead>
+                <tbody id="tabla-pedidos"><tr><td colspan="7">Cargando…</td></tr></tbody>
+            </table>
+        </div>
+    </main>
+</div>
+
+<div class="modal-overlay" id="modal-pedido">
+    <div class="modal" style="max-width:560px" id="modal-pedido-body"></div>
+</div>
+
+<script src="/js/theme.js"></script>
+<script src="/js/api.js"></script>
+<script src="/js/icons.js"></script>
+<script src="/js/toast.js"></script>
+<script src="/admin/js/admin-layout.js"></script>
+<script>
+requireAuthAdmin();
+renderAdminSidebar('pedidos');
+document.getElementById('topbar').innerHTML = adminHeader('Pedidos', 'Seguimiento y actualización de estado de envío.');
+
+const ESTADOS = ['pendiente', 'confirmado', 'procesando', 'enviado', 'entregado', 'cancelado'];
+
+async function cargarPedidos() {
+    const estado = document.getElementById('f-estado').value;
+    const params = estado && estado !== 'Todos' ? `?estado=${estado}` : '';
+    const pedidos = await api('/admin/pedidos' + params);
+    document.getElementById('tabla-pedidos').innerHTML = pedidos.map((p) => `
+        <tr>
+            <td class="mono">${p.numero_orden}</td>
+            <td>${p.cliente_nombre}<div style="color:var(--text-muted);font-size:.78rem">${p.cliente_correo}</div></td>
+            <td>${formatoFecha(p.fecha_pedido)}</td>
+            <td class="mono">${formatoMoneda(p.total)}</td>
+            <td><span class="tag">${p.estado}</span></td>
+            <td>
+                <select onchange="cambiarEstado(${p.id}, this.value)">
+                    ${ESTADOS.map((e) => `<option value="${e}" ${e === p.estado ? 'selected' : ''}>${e}</option>`).join('')}
+                </select>
+            </td>
+            <td><button class="btn btn-outline btn-sm" onclick="verDetalle(${p.id})">Detalle</button></td>
+        </tr>
+    `).join('') || '<tr><td colspan="7">No hay pedidos con ese filtro.</td></tr>';
+}
+
+async function cambiarEstado(id, estado) {
+    await api(`/admin/pedidos/${id}/estado`, { method: 'PUT', body: { estado } });
+    cargarPedidos();
+}
+
+async function verDetalle(id) {
+    const d = await api(`/pedidos/${id}/detalle`);
+    document.getElementById('modal-pedido-body').innerHTML = `
+        <button class="modal-close" onclick="document.getElementById('modal-pedido').classList.remove('open')">${icon('x', 18)}</button>
+        <h3>${d.numero_orden}</h3>
+        <p class="mono" style="margin-bottom:4px">${formatoFecha(d.fecha_pedido)} · <span class="tag">${d.estado}</span></p>
+        <p style="margin-bottom:12px">${d.direccion_envio || 'Sin dirección'} · Pago: ${d.metodo_pago || '—'}</p>
+        <div class="table-wrap" style="margin-bottom:14px">
+            <table>
+                <thead><tr><th>Producto</th><th>Cant.</th><th>P. unit.</th><th>Subtotal</th></tr></thead>
+                <tbody>
+                    ${d.items.map((i) => `
+                        <tr>
+                            <td>${i.nombre}</td>
+                            <td class="mono">${i.cantidad}</td>
+                            <td class="mono">${formatoMoneda(i.precio_unitario)}</td>
+                            <td class="mono">${formatoMoneda(i.subtotal)}</td>
+                        </tr>
+                    `).join('')}
+                </tbody>
+            </table>
+        </div>
+        <div style="display:flex;justify-content:space-between"><span>Subtotal</span><span class="mono">${formatoMoneda(d.subtotal)}</span></div>
+        <div style="display:flex;justify-content:space-between;color:var(--text-muted)"><span>IVA</span><span class="mono">${formatoMoneda(d.impuestos)}</span></div>
+        <div style="display:flex;justify-content:space-between;color:var(--text-muted)"><span>Envío</span><span class="mono">${Number(d.envio) === 0 ? 'Gratis' : formatoMoneda(d.envio)}</span></div>
+        ${Number(d.descuento) > 0 ? `<div style="display:flex;justify-content:space-between;color:var(--success)"><span>Descuento Club de puntos</span><span class="mono">-${formatoMoneda(d.descuento)}</span></div>` : ''}
+        <div style="display:flex;justify-content:space-between;font-weight:700;font-size:1.05rem"><span>Total</span><span class="mono">${formatoMoneda(d.total)}</span></div>
+    `;
+    document.getElementById('modal-pedido').classList.add('open');
+}
+
+document.getElementById('f-estado').addEventListener('change', cargarPedidos);
+cargarPedidos();
+</script>
+</body>
+</html>

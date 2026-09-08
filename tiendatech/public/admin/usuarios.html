@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Equipo · Admin TiendaTech</title>
+<link rel="stylesheet" href="/css/style.css" />
+</head>
+<body class="theme-light">
+<div class="admin-shell">
+    <aside class="admin-sidebar" id="admin-sidebar-placeholder"></aside>
+    <main class="admin-main">
+        <div id="topbar"></div>
+
+        <div class="table-wrap">
+            <table>
+                <thead><tr><th>ID</th><th>Nombre</th><th>Email</th><th>Teléfono</th><th>Rol</th><th>Estado</th><th>Último acceso</th></tr></thead>
+                <tbody id="tabla-usuarios"><tr><td colspan="7">Cargando…</td></tr></tbody>
+            </table>
+        </div>
+    </main>
+</div>
+
+<div class="modal-overlay" id="modal-usuario">
+    <div class="modal" id="modal-usuario-body"></div>
+</div>
+
+<script src="/js/theme.js"></script>
+<script src="/js/api.js"></script>
+<script src="/js/icons.js"></script>
+<script src="/js/toast.js"></script>
+<script src="/admin/js/admin-layout.js"></script>
+<script>
+requireAuthAdmin();
+renderAdminSidebar('usuarios');
+const usuarioActual = Sesion.usuario();
+const esAdmin = usuarioActual && usuarioActual.rol === 'admin';
+document.getElementById('topbar').innerHTML = adminHeader(
+    'Equipo interno', 'Usuarios con acceso al panel: administradores y vendedores.',
+    esAdmin ? '<button class="btn btn-primary" id="btn-nuevo" onclick="abrirNuevo()">Nuevo usuario</button>' : ''
+);
+
+async function cargarUsuarios() {
+    const usuarios = await api('/admin/usuarios');
+    document.getElementById('tabla-usuarios').innerHTML = usuarios.map((u) => `
+        <tr>
+            <td class="mono">${u.id}</td>
+            <td>${u.nombre}</td>
+            <td>${u.email}</td>
+            <td>${u.telefono || '—'}</td>
+            <td><span class="tag" style="text-transform:capitalize">${u.rol}</span></td>
+            <td>${u.activo
+                ? '<span class="tag" style="color:var(--success);border-color:var(--success)">Activo</span>'
+                : '<span class="tag" style="color:var(--danger);border-color:var(--danger)">Inactivo</span>'}</td>
+            <td>${u.ultimo_login ? formatoFecha(u.ultimo_login) : 'Nunca'}</td>
+        </tr>
+    `).join('');
+}
+
+function abrirNuevo() {
+    document.getElementById('modal-usuario-body').innerHTML = `
+        <button class="modal-close" onclick="document.getElementById('modal-usuario').classList.remove('open')">${icon('x', 18)}</button>
+        <h3>Nuevo usuario interno</h3>
+        <div class="field"><label>Nombre completo</label><input id="u-nombre" /></div>
+        <div class="field"><label>Email</label><input type="email" id="u-email" /></div>
+        <div class="field-row">
+            <div class="field"><label>Contraseña</label><input type="password" id="u-password" minlength="6" /></div>
+            <div class="field"><label>Teléfono</label><input id="u-telefono" /></div>
+        </div>
+        <div class="field"><label>Rol</label>
+            <select id="u-rol"><option value="vendedor">Vendedor</option><option value="admin">Administrador</option></select>
+        </div>
+        <div id="u-error" style="color:var(--danger);font-size:.85rem;margin-bottom:10px;display:none"></div>
+        <button class="btn btn-primary" style="width:100%" onclick="guardarUsuario()">Crear usuario</button>
+    `;
+    document.getElementById('modal-usuario').classList.add('open');
+}
+
+async function guardarUsuario() {
+    const body = {
+        nombre: document.getElementById('u-nombre').value.trim(),
+        email: document.getElementById('u-email').value.trim(),
+        password: document.getElementById('u-password').value,
+        telefono: document.getElementById('u-telefono').value.trim(),
+        rol: document.getElementById('u-rol').value,
+    };
+    const err = document.getElementById('u-error');
+    err.style.display = 'none';
+    try {
+        await api('/admin/usuarios', { method: 'POST', body });
+        document.getElementById('modal-usuario').classList.remove('open');
+        cargarUsuarios();
+    } catch (e) {
+        err.textContent = e.message;
+        err.style.display = 'block';
+    }
+}
+
+cargarUsuarios();
+</script>
+</body>
+</html>

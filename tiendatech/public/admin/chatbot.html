@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Analítica chatbot · Admin TiendaTech</title>
+<link rel="stylesheet" href="/css/style.css" />
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+</head>
+<body class="theme-light">
+<div class="admin-shell">
+    <aside class="admin-sidebar" id="admin-sidebar-placeholder"></aside>
+    <main class="admin-main">
+        <div id="topbar"></div>
+
+        <div class="stat-grid" id="stat-grid"></div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-bottom:22px">
+            <div class="card">
+                <h3>Consultas por uso</h3>
+                <canvas id="chart-uso" height="200"></canvas>
+            </div>
+            <div class="card">
+                <h3>Consultas por rango de presupuesto</h3>
+                <canvas id="chart-presupuesto" height="200"></canvas>
+            </div>
+        </div>
+
+        <div class="card">
+            <h3>Últimas consultas</h3>
+            <p>Una consulta sin sugerencias es una oportunidad de restock o de ampliar catálogo.</p>
+            <div class="table-wrap">
+                <table>
+                    <thead><tr><th>Fecha</th><th>Cliente</th><th>Uso</th><th>Presupuesto</th><th>Mensaje</th><th>Sugerencias</th></tr></thead>
+                    <tbody id="tabla-consultas"><tr><td colspan="6">Cargando…</td></tr></tbody>
+                </table>
+            </div>
+        </div>
+    </main>
+</div>
+
+<script src="/js/theme.js"></script>
+<script src="/js/api.js"></script>
+<script src="/js/icons.js"></script>
+<script src="/js/toast.js"></script>
+<script src="/admin/js/admin-layout.js"></script>
+<script>
+requireAuthAdmin();
+renderAdminSidebar('chatbot');
+document.getElementById('topbar').innerHTML = adminHeader('Analítica del chatbot', 'Qué está buscando la gente, con qué presupuesto y dónde falta inventario.');
+
+async function cargar() {
+    const d = await api('/admin/chatbot-consultas');
+
+    document.getElementById('stat-grid').innerHTML = `
+        <div class="stat-card"><div class="stat-label">Consultas totales</div><div class="stat-value">${d.total}</div></div>
+        <div class="stat-card"><div class="stat-label">Este mes</div><div class="stat-value">${d.este_mes}</div></div>
+        <div class="stat-card"><div class="stat-label">Sin recomendación</div><div class="stat-value" style="color:var(--danger)">${d.sin_resultado}</div><div class="stat-sub">${d.total ? Math.round(d.sin_resultado / d.total * 100) : 0}% de las consultas</div></div>
+        <div class="stat-card"><div class="stat-label">Presupuesto promedio</div><div class="stat-value" style="font-size:1.4rem">${formatoMoneda(d.presupuesto_promedio)}</div></div>
+    `;
+
+    new Chart(document.getElementById('chart-uso'), {
+        type: 'bar',
+        data: {
+            labels: d.por_uso.map((u) => u.uso),
+            datasets: [{ data: d.por_uso.map((u) => u.total), backgroundColor: '#B8672E' }]
+        },
+        options: { plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } }
+    });
+
+    new Chart(document.getElementById('chart-presupuesto'), {
+        type: 'doughnut',
+        data: {
+            labels: d.por_rango_presupuesto.map((r) => r.rango),
+            datasets: [{ data: d.por_rango_presupuesto.map((r) => r.total), backgroundColor: ['#6C9BC9', '#6FAE8C', '#B8672E', '#C1584A', '#D9A441'] }]
+        },
+        options: { plugins: { legend: { position: 'bottom' } } }
+    });
+
+    const tbody = document.getElementById('tabla-consultas');
+    tbody.innerHTML = d.recientes.length === 0
+        ? '<tr><td colspan="6">Todavía no hay consultas al chatbot.</td></tr>'
+        : d.recientes.map((c) => `
+            <tr>
+                <td>${formatoFecha(c.fecha)}</td>
+                <td>${c.cliente_nombre || '<span style="color:var(--text-muted)">Anónimo</span>'}</td>
+                <td>${c.uso || '—'}</td>
+                <td class="mono">${c.presupuesto ? formatoMoneda(c.presupuesto) : '—'}</td>
+                <td>${c.mensaje ? c.mensaje.replace(/</g, '&lt;') : '—'}</td>
+                <td>${Number(c.num_sugerencias) === 0
+                    ? '<span class="tag" style="color:var(--danger);border-color:var(--danger)">Sin resultados</span>'
+                    : `<span class="tag" style="color:var(--success);border-color:var(--success)">${c.num_sugerencias}</span>`}</td>
+            </tr>
+        `).join('');
+}
+cargar();
+</script>
+</body>
+</html>

@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Preferencias · TiendaTech</title>
+<link rel="stylesheet" href="/css/style.css" />
+</head>
+<body>
+<div id="navbar-placeholder"></div>
+
+<div class="cuenta-shell">
+    <nav class="cuenta-nav" id="cuenta-nav"></nav>
+    <main class="cuenta-panel" id="cuenta-panel"><div class="empty-state">Cargando…</div></main>
+</div>
+
+<div id="footer-placeholder"></div>
+
+<script src="/js/theme.js"></script>
+<script src="/js/api.js"></script>
+<script src="/js/icons.js"></script>
+<script src="/js/toast.js"></script>
+<script src="/js/layout.js"></script>
+<script src="/js/chatbot.js"></script>
+<script src="/js/cuenta.js"></script>
+<script>
+let CID = null;
+const PREFS_DEF = [
+    { key: 'boletin', label: 'Boletín de novedades', desc: 'Lanzamientos y guías de compra por correo.' },
+    { key: 'ofertas', label: 'Alertas de ofertas', desc: 'Avísame cuando baje el precio de algo que vi.' },
+    { key: 'estado_pedidos', label: 'Notificar estado de pedidos', desc: 'Correo en cada cambio: confirmado, enviado, entregado.' },
+    { key: 'stock_favoritos', label: 'Avisar stock de favoritos', desc: 'Cuando vuelva a haber stock de un favorito.' },
+];
+
+montarCuenta('preferencias', async (panel, P) => {
+    CID = P.id;
+    const prefs = P.preferencias || {};
+    panel.innerHTML = `
+        <div class="cuenta-head"><h1>Preferencias</h1><p>Controla qué comunicaciones recibes.</p></div>
+        <div class="card" style="max-width:580px">
+            ${PREFS_DEF.map((p) => `
+                <div class="pref-row">
+                    <div class="pref-text"><strong>${p.label}</strong><span>${p.desc}</span></div>
+                    <label class="switch"><input type="checkbox" data-pref="${p.key}" ${prefs[p.key] ? 'checked' : ''}/><span class="track"></span></label>
+                </div>
+            `).join('')}
+        </div>
+        <button class="btn btn-primary" style="margin-top:16px" onclick="guardarPrefs()">Guardar preferencias</button>
+
+        <div class="card" style="max-width:580px;margin-top:24px">
+            <h3 style="margin-top:0">Apariencia</h3>
+            <p style="color:var(--text-muted);font-size:.88rem;margin-top:4px">Elige el tema de color. Se guarda en este navegador y se aplica en toda la tienda.</p>
+            <div class="tema-swatches" id="tema-swatches"></div>
+        </div>
+    `;
+    pintarTemas();
+});
+
+function pintarTemas() {
+    const cont = document.getElementById('tema-swatches');
+    if (!cont) return;
+    const actual = Tema.actual();
+    cont.innerHTML = Tema.lista.map((t) => `
+        <button class="tema-swatch ${t.clave === actual ? 'sel' : ''}" data-tema="${t.clave}">
+            <span class="ts-color" data-c="${t.clave}"></span>${t.nombre}
+        </button>`).join('');
+    cont.querySelectorAll('.tema-swatch').forEach((b) =>
+        b.addEventListener('click', () => { Tema.aplicar(b.dataset.tema); pintarTemas(); toast('Tema aplicado', 'ok'); }));
+}
+
+async function guardarPrefs() {
+    const prefs = {};
+    document.querySelectorAll('[data-pref]').forEach((c) => prefs[c.dataset.pref] = c.checked);
+    try {
+        await api(`/clientes/${CID}/preferencias`, { method: 'PUT', body: prefs });
+        toast('Preferencias guardadas', 'ok');
+    } catch (e) { toast(e.message, 'error'); }
+}
+</script>
+</body>
+</html>

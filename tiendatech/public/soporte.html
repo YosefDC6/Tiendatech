@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Soporte · TiendaTech</title>
+<link rel="stylesheet" href="/css/style.css" />
+</head>
+<body>
+<div id="navbar-placeholder"></div>
+
+<div class="cuenta-shell">
+    <nav class="cuenta-nav" id="cuenta-nav"></nav>
+    <main class="cuenta-panel" id="cuenta-panel"><div class="empty-state">Cargando…</div></main>
+</div>
+
+<div id="footer-placeholder"></div>
+<div class="modal-overlay" id="modal-generico"><div class="modal" id="modal-generico-body"></div></div>
+
+<script src="/js/theme.js"></script>
+<script src="/js/api.js"></script>
+<script src="/js/icons.js"></script>
+<script src="/js/toast.js"></script>
+<script src="/js/layout.js"></script>
+<script src="/js/chatbot.js"></script>
+<script src="/js/cuenta.js"></script>
+<script>
+let CID = null;
+const EST_LABEL = { abierto: 'Abierto', en_proceso: 'En proceso', resuelto: 'Resuelto', cerrado: 'Cerrado' };
+const PRIO_LABEL = { baja: 'Baja', media: 'Media', alta: 'Alta' };
+
+montarCuenta('soporte', async (panel, P) => {
+    CID = P.id;
+    const idTicket = new URLSearchParams(location.search).get('ticket');
+    if (idTicket) await vistaHilo(panel, idTicket);
+    else await vistaLista(panel);
+});
+
+async function vistaLista(panel) {
+    const list = await api(`/clientes/${CID}/tickets`);
+    panel.innerHTML = `
+        <div class="cuenta-head" style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px">
+            <div><h1>Soporte</h1><p>Abre un ticket y te damos seguimiento por aquí.</p></div>
+            <button class="btn btn-primary btn-sm" onclick="formTicket()">Nuevo ticket</button>
+        </div>
+        ${list.length === 0
+            ? '<div class="empty-state">No tienes tickets. Si algo salió mal con un pedido, crea uno y te ayudamos.</div>'
+            : list.map((t) => `
+                <a class="card ticket-row" href="/soporte.html?ticket=${t.id}">
+                    <div>
+                        <span class="mono" style="font-size:.82rem">${t.folio}</span>
+                        <div style="font-weight:600">${t.asunto}</div>
+                        <div style="font-size:.8rem;color:var(--text-muted)">${formatoFecha(t.fecha_actualizacion)} · ${t.mensajes} mensaje(s)</div>
+                    </div>
+                    <span class="tag estado-${t.estado}">${EST_LABEL[t.estado]}</span>
+                </a>
+            `).join('')}
+    `;
+}
+
+async function vistaHilo(panel, id) {
+    let t;
+    try { t = await api(`/clientes/${CID}/tickets/${id}`); }
+    catch (e) { panel.innerHTML = `<div class="empty-state">${e.message}<br><a href="/soporte.html">Volver a soporte</a></div>`; return; }
+    panel.innerHTML = `
+        <div class="cuenta-head">
+            <a href="/soporte.html" style="font-size:.85rem">← Todos mis tickets</a>
+            <h1 style="margin-top:6px">${t.asunto}</h1>
+            <p><span class="mono">${t.folio}</span> · <span class="tag estado-${t.estado}">${EST_LABEL[t.estado]}</span> · Prioridad ${PRIO_LABEL[t.prioridad]}</p>
+        </div>
+        <div class="hilo">
+            ${t.mensajes.map((m) => `
+                <div class="hilo-msg ${m.autor === 'cliente' ? 'mio' : 'equipo'}">
+                    <div class="hm-meta">${m.autor === 'cliente' ? 'Tú' : (m.usuario_nombre || 'Equipo TiendaTech')} · ${formatoFecha(m.fecha)}</div>
+                    <div class="hm-txt">${m.mensaje.replace(/</g, '&lt;')}</div>
+                </div>
+            `).join('')}
+        </div>
+        ${['resuelto', 'cerrado'].includes(t.estado)
+            ? '<p style="color:var(--text-muted);font-size:.85rem">Este ticket está cerrado. Si escribes de nuevo, se vuelve a abrir.</p>'
+            : ''}
+        <div class="field" style="margin-top:16px"><textarea id="hilo-txt" rows="3" placeholder="Escribe tu mensaje…"></textarea></div>
+        <button class="btn btn-primary" onclick="responder(${t.id})">Enviar mensaje</button>
+    `;
+}
+
+async function responder(id) {
+    const mensaje = document.getElementById('hilo-txt').value.trim();
+    if (!mensaje) { toast('Escribe un mensaje', 'warn'); return; }
+    try {
+        await api(`/clientes/${CID}/tickets/${id}/mensajes`, { method: 'POST', body: { mensaje } });
+        location.reload();
+    } catch (e) { toast(e.message, 'error'); }
+}
+
+function formTicket() {
+    document.getElementById('modal-generico-body').innerHTML = `
+        <button class="modal-close" onclick="document.getElementById('modal-generico').classList.remove('open')">${icon('x', 20)}</button>
+        <h3>Nuevo ticket de soporte</h3>
+        <div class="field"><label>Asunto</label><input id="tk-asunto" placeholder="Resumen del problema" /></div>
+        <div class="field-row">
+            <div class="field"><label>Categoría</label>
+                <select id="tk-cat">
+                    <option value="pedido">Un pedido</option>
+                    <option value="garantia">Garantía</option>
+                    <option value="devolucion">Devolución o cambio</option>
+                    <option value="facturacion">Facturación</option>
+                    <option value="cuenta">Mi cuenta</option>
+                    <option value="general">Otro</option>
+                </select>
+            </div>
+            <div class="field"><label>Prioridad</label>
+                <select id="tk-prio"><option value="baja">Baja</option><option value="media" selected>Media</option><option value="alta">Alta</option></select>
+            </div>
+        </div>
+        <div class="field"><label>Describe el problema</label><textarea id="tk-desc" rows="4" placeholder="Incluye tu número de orden si aplica."></textarea></div>
+        <button class="btn btn-primary" style="width:100%" onclick="crearTicket()">Crear ticket</button>
+    `;
+    document.getElementById('modal-generico').classList.add('open');
+}
+
+async function crearTicket() {
+    const body = {
+        asunto: document.getElementById('tk-asunto').value.trim(),
+        categoria: document.getElementById('tk-cat').value,
+        prioridad: document.getElementById('tk-prio').value,
+        descripcion: document.getElementById('tk-desc').value.trim(),
+    };
+    if (!body.asunto || !body.descripcion) { toast('Asunto y descripción son obligatorios', 'warn'); return; }
+    try {
+        const r = await api(`/clientes/${CID}/tickets`, { method: 'POST', body });
+        toast('Ticket ' + r.ticket.folio + ' creado', 'ok');
+        location.href = '/soporte.html?ticket=' + r.ticket.id;
+    } catch (e) { toast(e.message, 'error'); }
+}
+</script>
+</body>
+</html>

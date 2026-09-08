@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Crear cuenta · TiendaTech</title>
+<link rel="stylesheet" href="/css/style.css" />
+</head>
+<body>
+<div id="navbar-placeholder"></div>
+
+<div class="auth-wrap">
+    <div class="page-hero">
+        <div class="hero-badge" data-ic="user" data-ic-size="28"></div>
+        <h1 id="auth-title">Crea tu cuenta</h1>
+        <p id="auth-sub">Regístrate para comprar, seguir tus pedidos, guardar favoritos y recibir recomendaciones.</p>
+    </div>
+
+    <div class="card" id="ya-sesion" hidden>
+        <p style="text-align:center;color:var(--text)">Ya iniciaste sesión como <strong id="ya-nombre"></strong>.</p>
+        <a class="btn btn-primary" style="width:100%;margin-bottom:10px" href="/perfil.html">Ir a mi perfil</a>
+        <button class="btn btn-outline" style="width:100%" id="btn-otra">Cerrar sesión y crear otra cuenta</button>
+    </div>
+
+    <div class="card" id="form-card" style="max-width:460px">
+        <form id="form-registro">
+            <div class="field"><label>Nombre completo</label><input type="text" id="nombre" required autocomplete="name" /></div>
+            <div class="field"><label>Correo electrónico</label><input type="email" id="correo" required autocomplete="email" /></div>
+            <div class="field-row">
+                <div class="field"><label>Contraseña (mín. 6)</label>
+                    <div style="display:flex;gap:8px">
+                        <input type="password" id="password" minlength="6" required autocomplete="new-password" />
+                        <button type="button" class="btn btn-outline btn-sm" id="toggle-pass" aria-label="Mostrar u ocultar contraseña" data-ic="eye" data-ic-size="16"></button>
+                    </div>
+                </div>
+                <div class="field"><label>Teléfono</label><input type="tel" id="telefono" autocomplete="tel" /></div>
+            </div>
+            <div class="field"><label>Empresa (opcional)</label><input type="text" id="empresa" /></div>
+            <div class="field-row">
+                <div class="field"><label>Ciudad</label><input type="text" id="ciudad" /></div>
+                <div class="field"><label>Estado</label><input type="text" id="estado" /></div>
+            </div>
+            <div id="registro-error" style="color:var(--danger);font-size:.85rem;margin-bottom:12px;display:none"></div>
+            <button class="btn btn-primary" style="width:100%" type="submit">Crear cuenta</button>
+        </form>
+        <p style="margin-top:16px;text-align:center">¿Ya tienes cuenta? <a href="/login.html">Inicia sesión</a></p>
+    </div>
+</div>
+
+<div id="footer-placeholder"></div>
+<script src="/js/theme.js"></script>
+<script src="/js/api.js"></script>
+<script src="/js/icons.js"></script>
+<script src="/js/toast.js"></script>
+<script src="/js/layout.js"></script>
+<script>
+const sesion = Sesion.cliente();
+if (sesion) {
+    document.getElementById('form-card').hidden = true;
+    document.getElementById('ya-sesion').hidden = false;
+    document.getElementById('auth-title').textContent = 'Ya tienes una cuenta';
+    document.getElementById('auth-sub').textContent = 'Estás dentro con una sesión activa.';
+    document.getElementById('ya-nombre').textContent = sesion.nombre;
+    document.getElementById('btn-otra').addEventListener('click', () => {
+        Sesion.cerrarSesionCliente();
+        location.reload();
+    });
+}
+
+document.getElementById('toggle-pass').addEventListener('click', () => {
+    const i = document.getElementById('password');
+    i.type = i.type === 'password' ? 'text' : 'password';
+});
+
+document.getElementById('form-registro').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const body = {
+        nombre: document.getElementById('nombre').value,
+        correo: document.getElementById('correo').value,
+        password: document.getElementById('password').value,
+        telefono: document.getElementById('telefono').value,
+        empresa: document.getElementById('empresa').value,
+        ciudad: document.getElementById('ciudad').value,
+        estado: document.getElementById('estado').value,
+    };
+    const errorBox = document.getElementById('registro-error');
+    errorBox.style.display = 'none';
+    try {
+        const data = await api('/auth/registro-cliente', { method: 'POST', body });
+        Sesion.guardarCliente(data.cliente, data.token);
+        toast('¡Cuenta creada!', 'ok');
+        setTimeout(() => location.href = '/perfil.html', 500);
+    } catch (err) {
+        errorBox.textContent = err.message;
+        errorBox.style.display = 'block';
+    }
+});
+</script>
+</body>
+</html>

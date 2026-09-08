@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Mi actividad · Admin TiendaTech</title>
+<link rel="stylesheet" href="/css/style.css" />
+</head>
+<body class="theme-light">
+<div class="admin-shell">
+    <aside class="admin-sidebar" id="admin-sidebar-placeholder"></aside>
+    <main class="admin-main">
+        <div id="topbar"></div>
+        <div class="table-wrap">
+            <table>
+                <thead><tr><th>Fecha</th><th>Cliente</th><th>Tipo</th><th>Descripción</th></tr></thead>
+                <tbody id="tabla"><tr><td colspan="4">Cargando…</td></tr></tbody>
+            </table>
+        </div>
+    </main>
+</div>
+
+<script src="/js/theme.js"></script>
+<script src="/js/api.js"></script>
+<script src="/js/icons.js"></script>
+<script src="/js/toast.js"></script>
+<script src="/admin/js/admin-layout.js"></script>
+<script>
+requireAuthAdmin();
+renderAdminSidebar('mi-actividad');
+const u = Sesion.usuario();
+document.getElementById('topbar').innerHTML = adminHeader('Mi actividad', `Interacciones registradas por ${u ? u.nombre : 'ti'}.`);
+
+(async () => {
+    try {
+        const rows = await api(`/usuarios/${u.id}/actividad`);
+        document.getElementById('tabla').innerHTML = rows.length === 0
+            ? '<tr><td colspan="4">Aún no has registrado interacciones.</td></tr>'
+            : rows.map((f) => `
+                <tr>
+                    <td>${formatoFecha(f.fecha)}</td>
+                    <td>${f.cliente}</td>
+                    <td style="text-transform:capitalize">${f.tipo}</td>
+                    <td>${f.descripcion}</td>
+                </tr>`).join('');
+    } catch (e) {
+        document.getElementById('tabla').innerHTML = `<tr><td colspan="4">${e.message}</td></tr>`;
+    }
+})();
+</script>
+</body>
+</html>

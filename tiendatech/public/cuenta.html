@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Mi cuenta · TiendaTech</title>
+<script>
+// Enlaces antiguos con hash -> páginas propias
+(function () {
+    var map = { pedidos: '/pedidos.html', favoritos: '/favoritos.html', direcciones: '/direcciones.html',
+                datos: '/datos.html', perfil: '/datos.html', seguridad: '/seguridad.html',
+                preferencias: '/preferencias.html', resumen: '/perfil.html' };
+    var h = (location.hash || '').replace('#', '');
+    var qs = new URLSearchParams(location.search);
+    if (!h && qs.get('pedido')) h = 'pedidos';
+    location.replace(map[h] || '/perfil.html');
+})();
+</script>
+</head>
+<body><p style="font-family:sans-serif;padding:24px">Redirigiendo a <a href="/perfil.html">tu cuenta</a>…</p></body>
+</html>
