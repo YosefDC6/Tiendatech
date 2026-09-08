@@ -155,7 +155,7 @@
                 const card = document.createElement('div');
                 card.className = 'chat-suggestion';
                 card.innerHTML = `
-                    <img src="${p.imagen_url || ''}" alt="${p.nombre}" onerror="this.style.opacity=0" />
+                    <img src="${p.imagen_url || '/img/producto.svg'}" referrerpolicy="no-referrer" alt="${p.nombre}" onerror="this.onerror=null;this.src='/img/producto.svg'" />
                     <div style="flex:1">
                         <div class="name">${p.nombre}</div>
                         <div class="price">${formatoMoneda(p.precio)} · stock: ${p.stock}</div>

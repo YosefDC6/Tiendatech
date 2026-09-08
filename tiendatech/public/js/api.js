@@ -118,6 +118,15 @@ function actualizarBadgeCarrito() {
 
 document.addEventListener('DOMContentLoaded', actualizarBadgeCarrito);
 
+// Red de seguridad: si una promesa (normalmente una llamada a la API) falla
+// sin que nadie la atrape, se avisa con un toast — nunca con texto crudo en
+// la consola, que se ve fuera de contexto para el usuario final.
+window.addEventListener('unhandledrejection', (e) => {
+    const msg = (e && e.reason && e.reason.message) ? e.reason.message : '';
+    if (window.toast) toast(msg || 'Hubo un problema de conexión. Intenta de nuevo.', 'error');
+    e.preventDefault();
+});
+
 // Exponer en window: las declaraciones `const` NO se vuelven propiedades
 // de window por sí solas, y layout.js / chatbot.js hacen `window.Sesion`.
 window.api = api;

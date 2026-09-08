@@ -65,7 +65,7 @@ async function cargarCarrito() {
         subtotal += Number(linea);
         return `
         <div class="card cart-line">
-            <img class="cart-thumb" src="${i.imagen_url || ''}" onerror="this.style.opacity=0.3"
+            <img class="cart-thumb" src="${i.imagen_url || '/img/producto.svg'}" referrerpolicy="no-referrer" onerror="this.onerror=null;this.src='/img/producto.svg'"
                  onclick="location.href='/index.html#producto-${i.producto_id}'" alt="${i.nombre}" />
             <div class="cart-info">
                 <div class="nm">${i.nombre}</div>

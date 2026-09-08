@@ -444,83 +444,83 @@ INSERT INTO productos
 VALUES
  ('Laptop ThinkPad E14', 'Laptop empresarial ligera, ideal para oficina y productividad diaria.',
   1, 'Lenovo', 14999.00, 18, 5, 'Intel Core i5-1335U', 16, '512GB SSD NVMe', 'Intel Iris Xe (integrada)', '14" FHD IPS',
-  '{oficina,estudiante,programacion}', 'https://m.media-amazon.com/images/I/71M6EqQfXfL._AC_SL1500_.jpg', 1, true, 'push'),
+  '{oficina,estudiante,programacion}', NULL, 1, true, 'push'),
 
  ('Laptop Gamer Legion 5', 'Laptop gamer con gráficos dedicados para juegos AAA a alta tasa de refresco.',
   1, 'Lenovo', 27999.00, 9, 4, 'AMD Ryzen 7 7735HS', 16, '1TB SSD NVMe', 'NVIDIA RTX 4060 8GB', '15.6" FHD 165Hz',
-  '{gaming,streaming}', 'https://m.media-amazon.com/images/I/71z62wS4RtL._AC_SL1500_.jpg', 2, true, 'push'),
+  '{gaming,streaming}', NULL, 2, true, 'push'),
 
  ('MacBook Air M2', 'Laptop ultradelgada, gran autonomía, ideal para diseño y movilidad.',
   1, 'Apple', 27999.00, 7, 3, 'Apple M2', 8, '256GB SSD', 'GPU integrada 8-core', '13.6" Liquid Retina',
-  '{diseno,oficina,estudiante}', 'https://m.media-amazon.com/images/I/71f5Eu5lJSL._AC_SL1500_.jpg', 3, true, 'pull'),
+  '{diseno,oficina,estudiante}', NULL, 3, true, 'pull'),
 
  ('Laptop ASUS VivoBook 15', 'Laptop versátil de entrada, ideal para estudiantes y trámites básicos.',
   1, 'ASUS', 9999.00, 25, 8, 'Intel Core i3-1215U', 8, '256GB SSD NVMe', 'Intel UHD (integrada)', '15.6" FHD',
-  '{estudiante,oficina}', 'https://m.media-amazon.com/images/I/61Z0RmY1sVL._AC_SL1500_.jpg', 2, true, 'push'),
+  '{estudiante,oficina}', NULL, 2, true, 'push'),
 
  ('Laptop Dell XPS 15', 'Laptop premium para creadores de contenido y edición profesional.',
   1, 'Dell', 39999.00, 5, 3, 'Intel Core i7-13700H', 32, '1TB SSD NVMe', 'NVIDIA RTX 4050 6GB', '15.6" OLED 3.5K',
-  '{diseno,programacion,gaming}', 'https://m.media-amazon.com/images/I/61qsQeE9lIL._AC_SL1500_.jpg', 1, true, 'pull'),
+  '{diseno,programacion,gaming}', NULL, 1, true, 'pull'),
 
  ('PC Escritorio Oficina Pro', 'Equipo de escritorio compacto para trabajo de oficina y trámites.',
   2, 'HP', 8999.00, 14, 5, 'Intel Core i3-12100', 8, '256GB SSD', 'Intel UHD 730 (integrada)', 'N/A (sin monitor)',
-  '{oficina,estudiante}', 'https://m.media-amazon.com/images/I/61k1eYnYQ4L._AC_SL1500_.jpg', 2, true, 'push'),
+  '{oficina,estudiante}', NULL, 2, true, 'push'),
 
  ('PC Gamer RTX 4070', 'Torre gamer de alto desempeño para juegos en 1440p y creación de contenido.',
   2, 'ArmadoTech', 34999.00, 6, 3, 'AMD Ryzen 7 7700X', 32, '2TB SSD NVMe', 'NVIDIA RTX 4070 12GB', 'N/A (sin monitor)',
-  '{gaming,streaming,diseno}', 'https://m.media-amazon.com/images/I/71wZq1p6cwL._AC_SL1500_.jpg', 3, true, 'pull'),
+  '{gaming,streaming,diseno}', NULL, 3, true, 'pull'),
 
  ('PC Workstation Diseño', 'Estación de trabajo para renderizado 3D, edición de video y CAD.',
   2, 'ArmadoTech', 54999.00, 3, 2, 'Intel Core i9-13900', 64, '2TB SSD NVMe + 4TB HDD', 'NVIDIA RTX 4080 16GB', 'N/A (sin monitor)',
-  '{diseno,servidor,programacion}', 'https://m.media-amazon.com/images/I/71rEfLIkmDL._AC_SL1500_.jpg', 1, true, 'pull'),
+  '{diseno,servidor,programacion}', NULL, 1, true, 'pull'),
 
  ('PC Servidor Mini Torre', 'Equipo confiable para servidor doméstico o de pequeña oficina, bajo consumo.',
   2, 'HP', 12999.00, 8, 4, 'Intel Xeon E-2314', 16, '1TB SSD + 4TB HDD', 'Intel UHD P750', 'N/A (sin monitor)',
-  '{servidor,oficina}', 'https://m.media-amazon.com/images/I/61vY5rGZ0AL._AC_SL1500_.jpg', 2, true, 'push'),
+  '{servidor,oficina}', NULL, 2, true, 'push'),
 
  ('Tarjeta Gráfica RTX 4060 Ti', 'GPU dedicada de gama media-alta para gaming en 1440p y trabajo creativo.',
   3, 'ASUS', 8499.00, 20, 6, NULL, NULL, NULL, 'NVIDIA RTX 4060 Ti 8GB', NULL,
-  '{gaming,diseno,streaming}', 'https://m.media-amazon.com/images/I/71RJmZK+bmL._AC_SL1500_.jpg', 2, true, 'push'),
+  '{gaming,diseno,streaming}', NULL, 2, true, 'push'),
 
  ('Procesador AMD Ryzen 5 7600', 'CPU de 6 núcleos, gran relación precio-rendimiento para gaming y multitarea.',
   3, 'AMD', 4299.00, 30, 8, 'AMD Ryzen 5 7600 (6C/12T)', NULL, NULL, NULL, NULL,
-  '{gaming,oficina,programacion}', 'https://m.media-amazon.com/images/I/61C2j1zXybL._AC_SL1500_.jpg', 1, true, 'push'),
+  '{gaming,oficina,programacion}', NULL, 1, true, 'push'),
 
  ('Memoria RAM Kingston Fury 32GB (2x16)', 'Kit de memoria DDR5 de alto rendimiento para gaming y multitarea pesada.',
   3, 'Kingston', 2199.00, 40, 10, NULL, 32, NULL, NULL, NULL,
-  '{gaming,diseno,programacion}', 'https://m.media-amazon.com/images/I/61i2z1S3T1L._AC_SL1500_.jpg', 3, true, 'push'),
+  '{gaming,diseno,programacion}', NULL, 3, true, 'push'),
 
  ('SSD NVMe Samsung 980 1TB', 'Unidad de estado sólido ultrarrápida para sistema operativo y juegos.',
   3, 'Samsung', 1699.00, 45, 10, NULL, NULL, '1TB SSD NVMe', NULL, NULL,
-  '{gaming,oficina,estudiante,programacion,diseno}', 'https://m.media-amazon.com/images/I/61SM6-jXBBL._AC_SL1500_.jpg', 2, true, 'push'),
+  '{gaming,oficina,estudiante,programacion,diseno}', NULL, 2, true, 'push'),
 
  ('Fuente de Poder 650W 80+ Bronze', 'Fuente confiable y eficiente para equipos gamer de gama media.',
   3, 'EVGA', 1499.00, 22, 6, NULL, NULL, NULL, NULL, NULL,
-  '{gaming,oficina}', 'https://m.media-amazon.com/images/I/71x6tQ1QhKL._AC_SL1500_.jpg', 1, true, 'push'),
+  '{gaming,oficina}', NULL, 1, true, 'push'),
 
  ('Monitor Gamer 27" 165Hz', 'Monitor curvo QHD con alta tasa de refresco para gaming competitivo.',
   5, 'Samsung', 5999.00, 16, 5, NULL, NULL, NULL, NULL, '27" QHD 165Hz Curvo',
-  '{gaming,streaming,diseno}', 'https://m.media-amazon.com/images/I/81sJvW1qzXL._AC_SL1500_.jpg', 3, true, 'push'),
+  '{gaming,streaming,diseno}', NULL, 3, true, 'push'),
 
  ('Monitor Oficina 24" IPS', 'Monitor Full HD con panel IPS, ideal para productividad y estudio.',
   5, 'LG', 2799.00, 28, 8, NULL, NULL, NULL, NULL, '24" FHD IPS',
-  '{oficina,estudiante,programacion}', 'https://m.media-amazon.com/images/I/71RD1zgKlAL._AC_SL1500_.jpg', 2, true, 'push'),
+  '{oficina,estudiante,programacion}', NULL, 2, true, 'push'),
 
  ('Teclado Mecánico RGB', 'Teclado mecánico switches rojos con retroiluminación RGB personalizable.',
   4, 'Logitech', 1299.00, 35, 10, NULL, NULL, NULL, NULL, NULL,
-  '{gaming,streaming}', 'https://m.media-amazon.com/images/I/61UZBmR8xJL._AC_SL1500_.jpg', 3, true, 'push'),
+  '{gaming,streaming}', NULL, 3, true, 'push'),
 
  ('Mouse Inalámbrico Ergonómico', 'Mouse silencioso e inalámbrico, ideal para largas jornadas de oficina.',
   4, 'Logitech', 599.00, 50, 15, NULL, NULL, NULL, NULL, NULL,
-  '{oficina,estudiante,programacion}', 'https://m.media-amazon.com/images/I/61ExT6-6DKL._AC_SL1500_.jpg', 2, true, 'push'),
+  '{oficina,estudiante,programacion}', NULL, 2, true, 'push'),
 
  ('Audífonos Gamer 7.1 Surround', 'Audífonos con sonido envolvente y micrófono retráctil para gaming.',
   6, 'HyperX', 1399.00, 24, 8, NULL, NULL, NULL, NULL, NULL,
-  '{gaming,streaming}', 'https://m.media-amazon.com/images/I/71Q5aR1s5rL._AC_SL1500_.jpg', 1, true, 'push'),
+  '{gaming,streaming}', NULL, 1, true, 'push'),
 
  ('Webcam Full HD 1080p', 'Webcam con enfoque automático, ideal para streaming y videollamadas.',
   6, 'Logitech', 999.00, 3, 5, NULL, NULL, NULL, NULL, NULL,
-  '{streaming,oficina}', 'https://m.media-amazon.com/images/I/61-cpQyfR+L._AC_SL1500_.jpg', 3, true, 'pull');
+  '{streaming,oficina}', NULL, 3, true, 'pull');
 
 -- ---------------------------------------------------------
 -- CLIENTES DE PRUEBA  (contraseña "demo123" para los 4,

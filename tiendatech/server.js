@@ -19,10 +19,6 @@ const pool = new Pool(dbConfig);
 
 // Solo se registran errores reales del servidor en la consola; nada
 // decorativo. El cliente nunca ve mensajes de consola: la UI usa toasts.
-pool.connect((err, client, release) => {
-    if (err) { console.error('DB: no se pudo conectar —', err.message); return; }
-    release();
-});
 
 const asyncRoute = (fn) => (req, res) => fn(req, res).catch((err) => {
     console.error(req.method, req.originalUrl, '->', err.message);
@@ -1484,6 +1480,18 @@ app.get('/api/usuarios/:id/actividad', requireUsuario, asyncRoute(async (req, re
 // =========================================================
 app.get('/api', (req, res) => res.json({ status: 'ok', message: 'API TiendaTech activa' }));
 
-app.listen(PORT, () => {
+app.listen(PORT, async () => {
     console.log(`TiendaTech escuchando en http://localhost:${PORT}`);
+    // Ping a la base para dejar claro en el arranque si conectó o no.
+    try {
+        const r = await pool.query('SELECT COUNT(*)::int AS n FROM productos');
+        console.log(`Base de datos: conectada (${dbConfig.database}@${dbConfig.host}:${dbConfig.port}) - ${r.rows[0].n} productos`);
+    } catch (err) {
+        if (/relation .* does not exist/i.test(err.message)) {
+            console.error(`Base de datos: conectada a ${dbConfig.database}, pero SIN TABLAS. Carga db/database.sql.`);
+        } else {
+            console.error(`Base de datos: SIN CONEXION — ${err.message}`);
+            console.error('  Revisa que PostgreSQL esté encendido y que db.config.js tenga usuario/contraseña/puerto correctos.');
+        }
+    }
 });

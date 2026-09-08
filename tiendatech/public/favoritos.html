@@ -39,7 +39,7 @@ montarCuenta('favoritos', async (panel, P) => {
         ${favs.map((p) => `
             <div class="product-card">
                 <button class="fav-btn on" title="Quitar de favoritos" onclick="quitarFav(${p.id})">${icon('heart', 16)}</button>
-                <img src="${p.imagen_url || ''}" alt="${p.nombre}" onerror="this.style.opacity=.3" onclick="location.href='/index.html#producto-${p.id}'" style="cursor:pointer" />
+                <img src="${p.imagen_url || '/img/producto.svg'}" referrerpolicy="no-referrer" alt="${p.nombre}" onerror="this.onerror=null;this.src='/img/producto.svg'" onclick="location.href='/index.html#producto-${p.id}'" style="cursor:pointer" />
                 <div class="product-body">
                     <span class="product-brand">${p.marca || ''}</span>
                     <span class="product-name">${p.nombre}</span>

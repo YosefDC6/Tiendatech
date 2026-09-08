@@ -189,7 +189,7 @@ function renderRecientes() {
     document.getElementById('recientes').hidden = false;
     document.getElementById('recent-strip').innerHTML = prods.map((p) => `
         <div class="recent-card" onclick="location.href='/index.html#producto-${p.id}'">
-            <img src="${p.imagen_url || ''}" onerror="this.style.opacity=.3" alt="${p.nombre}" />
+            <img src="${p.imagen_url || '/img/producto.svg'}" referrerpolicy="no-referrer" onerror="this.onerror=null;this.src='/img/producto.svg'" alt="${p.nombre}" />
             <div class="rc-body">
                 <span class="rc-name">${p.nombre}</span>
                 <span class="rc-price">${formatoMoneda(p.precio)}</span>
@@ -218,7 +218,7 @@ function tarjetasProducto(lista) {
     return lista.map((p) => `
         <div class="product-card" id="producto-${p.id}">
             <button class="fav-btn ${Favoritos.tiene(p.id) ? 'on' : ''}" title="Guardar en favoritos" aria-label="Favorito" onclick="toggleFav(event, ${p.id})">${icon('heart', 16)}</button>
-            <img src="${p.imagen_url || ''}" alt="${p.nombre}" loading="lazy" onerror="this.style.opacity=0.3" onclick="verProducto(${p.id})" style="cursor:pointer" />
+            <img src="${p.imagen_url || '/img/producto.svg'}" referrerpolicy="no-referrer" alt="${p.nombre}" loading="lazy" onerror="this.onerror=null;this.src='/img/producto.svg'" onclick="verProducto(${p.id})" style="cursor:pointer" />
             <div class="product-body">
                 <span class="product-brand">${p.marca || ''}</span>
                 <span class="product-name" onclick="verProducto(${p.id})" style="cursor:pointer">${p.nombre}</span>
@@ -336,7 +336,7 @@ function verProducto(id) {
         ? `<div class="stock-urgente">${icon('alert', 14)} ¡Solo quedan ${p.stock}! Cómpralo antes de que se agote.</div>` : '';
     document.getElementById('modal-producto-body').innerHTML = `
         <button class="modal-close" onclick="document.getElementById('modal-producto').classList.remove('open')">${icon('x', 20)}</button>
-        <img src="${p.imagen_url || ''}" alt="${p.nombre}" style="width:100%;max-height:220px;object-fit:contain;background:var(--bg-panel-2);border-radius:8px;margin-bottom:16px" onerror="this.style.opacity=0.3" />
+        <img src="${p.imagen_url || '/img/producto.svg'}" referrerpolicy="no-referrer" alt="${p.nombre}" style="width:100%;max-height:220px;object-fit:contain;background:var(--bg-panel-2);border-radius:8px;margin-bottom:16px" onerror="this.onerror=null;this.src='/img/producto.svg'" />
         <span class="product-brand">${p.marca || ''}</span>
         <h3>${p.nombre}</h3>
         <p>${p.descripcion || ''}</p>
