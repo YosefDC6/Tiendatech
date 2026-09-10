@@ -20,6 +20,7 @@ CREATE EXTENSION IF NOT EXISTS pgcrypto;
 -- ---------------------------------------------------------
 -- LIMPIEZA (para poder re-ejecutar el archivo)
 -- ---------------------------------------------------------
+DROP TABLE IF EXISTS garantias               CASCADE;
 DROP TABLE IF EXISTS ticket_mensajes         CASCADE;
 DROP TABLE IF EXISTS tickets                 CASCADE;
 DROP TABLE IF EXISTS resenas                 CASCADE;
@@ -187,6 +188,11 @@ CREATE TABLE carrito_items (
     cliente_id      INTEGER REFERENCES clientes(id) ON DELETE CASCADE,
     producto_id     INTEGER REFERENCES productos(id) ON DELETE CASCADE,
     cantidad        INTEGER NOT NULL CHECK (cantidad > 0),
+    -- garantía extendida opcional para esta línea del carrito
+    garantia_clave  VARCHAR(10) NOT NULL DEFAULT 'none',
+    garantia_plan   VARCHAR(40),
+    garantia_meses  INTEGER NOT NULL DEFAULT 0,
+    garantia_costo  NUMERIC(10,2) NOT NULL DEFAULT 0,
     fecha_agregado  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -206,6 +212,14 @@ CREATE TABLE pedidos (
     estado                VARCHAR(20) DEFAULT 'pendiente'
                            CHECK (estado IN ('pendiente','confirmado','procesando','enviado','entregado','cancelado')),
     metodo_pago           VARCHAR(60),
+    -- Estado del pago (tarjeta = pagado al instante; SPEI / pago en tienda
+    -- = pendiente hasta que se registre el pago). pago_referencia es el
+    -- código que el cliente usa para pagar SPEI o presentar en caja.
+    pago_estado           VARCHAR(12) NOT NULL DEFAULT 'pagado'
+                           CHECK (pago_estado IN ('pagado','pendiente')),
+    pago_referencia       VARCHAR(40),
+    pago_vence            TIMESTAMP,
+    pago_reportado        BOOLEAN NOT NULL DEFAULT false,
     direccion_envio       VARCHAR(200),
     notas                 TEXT,
     numero_guia           VARCHAR(50),
@@ -223,8 +237,42 @@ CREATE TABLE pedido_items (
     producto_id       INTEGER REFERENCES productos(id),
     cantidad          INTEGER NOT NULL CHECK (cantidad > 0),
     precio_unitario   NUMERIC(10,2) NOT NULL,
-    subtotal          NUMERIC(12,2) NOT NULL
+    subtotal          NUMERIC(12,2) NOT NULL,
+    -- garantía extendida contratada para esta línea (0 = sin garantía)
+    garantia_plan     VARCHAR(40),
+    garantia_meses    INTEGER NOT NULL DEFAULT 0,
+    garantia_costo    NUMERIC(10,2) NOT NULL DEFAULT 0
 );
+
+-- ---------------------------------------------------------
+-- GARANTÍAS EXTENDIDAS
+--   Se genera un certificado por línea de pedido que contrató
+--   garantía. `codigo` es lo que el cliente presenta para validarla.
+-- ---------------------------------------------------------
+CREATE TABLE garantias (
+    id                 SERIAL PRIMARY KEY,
+    folio              VARCHAR(20) UNIQUE NOT NULL,     -- GAR-100001
+    codigo             VARCHAR(24) UNIQUE NOT NULL,     -- para validar
+    pedido_id          INTEGER REFERENCES pedidos(id) ON DELETE CASCADE,
+    pedido_item_id     INTEGER REFERENCES pedido_items(id) ON DELETE CASCADE,
+    cliente_id         INTEGER REFERENCES clientes(id) ON DELETE CASCADE,
+    producto_id        INTEGER REFERENCES productos(id) ON DELETE SET NULL,
+    plan               VARCHAR(40) NOT NULL,
+    meses              INTEGER NOT NULL,
+    costo              NUMERIC(10,2) NOT NULL,
+    inicio             DATE NOT NULL,
+    vence              DATE NOT NULL,
+    estado             VARCHAR(12) NOT NULL DEFAULT 'activa'
+                        CHECK (estado IN ('activa','usada','vencida','cancelada')),
+    reclamo_fecha      TIMESTAMP,
+    reclamo_desc       TEXT,
+    resuelto_por       INTEGER REFERENCES usuarios(id),
+    resuelto_fecha     TIMESTAMP,
+    resuelto_nota      TEXT,
+    fecha_creacion     TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX idx_garantias_cliente ON garantias(cliente_id);
+CREATE INDEX idx_garantias_estado ON garantias(estado);
 
 -- ---------------------------------------------------------
 -- MOVIMIENTOS DE INVENTARIO
@@ -624,6 +672,36 @@ INSERT INTO pedido_items (pedido_id, producto_id, cantidad, precio_unitario, sub
  ((SELECT id FROM pedidos WHERE numero_orden = 'ORD-24120'), 2, 1, 27999.00, 27999.00),
  ((SELECT id FROM pedidos WHERE numero_orden = 'ORD-24310'), 7, 1, 34999.00, 34999.00),
  ((SELECT id FROM pedidos WHERE numero_orden = 'ORD-24225'), 4, 1,  9999.00,  9999.00);
+
+-- Garantías extendidas de ejemplo (certificados de compras anteriores).
+-- No se recalculan los totales históricos de esos pedidos: lo que importa
+-- para la demo es el certificado. Los pedidos nuevos sí cuadran al centavo.
+INSERT INTO garantias (folio, codigo, pedido_id, pedido_item_id, cliente_id, producto_id, plan, meses, costo, inicio, vence, estado, reclamo_fecha, reclamo_desc) VALUES
+ ('GAR-100001', 'M9K2-7QTP-4XW8-2LRA',
+  (SELECT id FROM pedidos WHERE numero_orden = 'ORD-24051'),
+  (SELECT id FROM pedido_items WHERE pedido_id = (SELECT id FROM pedidos WHERE numero_orden = 'ORD-24051') AND producto_id = 8),
+  1, 8, 'Extendida · 24 meses', 24, 6600.00,
+  (CURRENT_DATE - INTERVAL '58 days')::date, (CURRENT_DATE - INTERVAL '58 days' + INTERVAL '24 months')::date,
+  'activa', NULL, NULL),
+ ('GAR-100002', 'T4P8-1CN5-9WQ2-KX7M',
+  (SELECT id FROM pedidos WHERE numero_orden = 'ORD-24120'),
+  (SELECT id FROM pedido_items WHERE pedido_id = (SELECT id FROM pedidos WHERE numero_orden = 'ORD-24120') AND producto_id = 2),
+  2, 2, 'Total · 36 meses', 36, 5040.00,
+  (CURRENT_DATE - INTERVAL '15 days')::date, (CURRENT_DATE - INTERVAL '15 days' + INTERVAL '36 months')::date,
+  'activa', (CURRENT_TIMESTAMP - INTERVAL '2 days'), 'La laptop se apaga sola bajo carga. Ya probé con otro cargador.'),
+ ('GAR-100003', 'B2L9-6RH0-3PT4-8XKW',
+  (SELECT id FROM pedidos WHERE numero_orden = 'ORD-24225'),
+  (SELECT id FROM pedido_items WHERE pedido_id = (SELECT id FROM pedidos WHERE numero_orden = 'ORD-24225') AND producto_id = 4),
+  4, 4, 'Básica · 12 meses', 12, 600.00,
+  (CURRENT_DATE - INTERVAL '400 days')::date, (CURRENT_DATE - INTERVAL '400 days' + INTERVAL '12 months')::date,
+  'vencida', NULL, NULL);
+
+UPDATE pedido_items SET garantia_plan = 'Extendida · 24 meses', garantia_meses = 24, garantia_costo = 6600.00
+ WHERE pedido_id = (SELECT id FROM pedidos WHERE numero_orden = 'ORD-24051') AND producto_id = 8;
+UPDATE pedido_items SET garantia_plan = 'Total · 36 meses', garantia_meses = 36, garantia_costo = 5040.00
+ WHERE pedido_id = (SELECT id FROM pedidos WHERE numero_orden = 'ORD-24120') AND producto_id = 2;
+UPDATE pedido_items SET garantia_plan = 'Básica · 12 meses', garantia_meses = 12, garantia_costo = 600.00
+ WHERE pedido_id = (SELECT id FROM pedidos WHERE numero_orden = 'ORD-24225') AND producto_id = 4;
 
 -- ---------------------------------------------------------
 -- MÉTRICAS iniciales — cuadradas con los pedidos de arriba

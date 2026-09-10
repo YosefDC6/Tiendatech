@@ -6,7 +6,7 @@
 <title>Interacciones · Admin TiendaTech</title>
 <link rel="stylesheet" href="/css/style.css" />
 </head>
-<body class="theme-light">
+<body>
 <div class="admin-shell">
     <aside class="admin-sidebar" id="admin-sidebar-placeholder"></aside>
     <main class="admin-main">
@@ -38,6 +38,7 @@
 <script src="/js/icons.js"></script>
 <script src="/js/toast.js"></script>
 <script src="/admin/js/admin-layout.js"></script>
+<script src="/admin/js/interaccion-sim.js"></script>
 <script>
 requireAuthAdmin();
 renderAdminSidebar('interacciones');
@@ -72,39 +73,23 @@ async function cargar() {
 
 async function nueva() {
     const clientes = await api('/admin/clientes');
-    document.getElementById('modal-body').innerHTML = `
-        <button class="modal-close" onclick="document.getElementById('modal').classList.remove('open')">${icon('x', 20)}</button>
-        <h3>Registrar interacción</h3>
-        <div class="field"><label>Cliente</label>
-            <select id="ni-cliente">${clientes.map((c) => `<option value="${c.id}">${c.nombre} — ${c.correo}</option>`).join('')}</select>
-        </div>
-        <div class="field"><label>Tipo</label>
-            <select id="ni-tipo">
-                <option value="llamada">Llamada</option><option value="correo">Correo</option>
-                <option value="reunion">Reunión</option><option value="soporte">Soporte</option>
-            </select>
-        </div>
-        <div class="field"><label>Descripción</label><textarea id="ni-desc" rows="3"></textarea></div>
-        <button class="btn btn-primary" style="width:100%" onclick="guardar()">Guardar</button>
-    `;
-    document.getElementById('modal').classList.add('open');
-}
-async function guardar() {
-    const descripcion = document.getElementById('ni-desc').value.trim();
-    if (!descripcion) { toast('Escribe una descripción', 'warn'); return; }
-    try {
-        await api('/admin/interacciones', { method: 'POST', body: {
-            cliente_id: Number(document.getElementById('ni-cliente').value),
-            tipo: document.getElementById('ni-tipo').value, descripcion,
-        }});
-        document.getElementById('modal').classList.remove('open');
-        toast('Interacción registrada', 'ok'); cargar();
-    } catch (e) { toast(e.message, 'error'); }
+    simuladorInteraccion({
+        clientes: clientes.map((c) => ({ id: c.id, nombre: c.nombre, correo: c.correo, telefono: c.telefono })),
+        onGuardar: (tipo, descripcion, cli) => api('/admin/interacciones', {
+            method: 'POST',
+            body: { cliente_id: cli.id, tipo, descripcion },
+        }),
+        despues: cargar,
+    });
 }
 
 ['f-tipo', 'f-desde', 'f-hasta'].forEach((id) => document.getElementById(id).addEventListener('change', cargar));
 document.getElementById('f-busqueda').addEventListener('keydown', (e) => { if (e.key === 'Enter') cargar(); });
 cargar();
+
+// ?nueva=1  o  ?nueva=correo  abre el simulador
+const _n = new URLSearchParams(location.search).get('nueva');
+if (_n) nueva().then(() => { if (_n !== '1' && window.__simTipo) __simTipo(_n); });
 </script>
 </body>
 </html>

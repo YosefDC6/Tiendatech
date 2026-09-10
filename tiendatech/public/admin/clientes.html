@@ -6,7 +6,7 @@
 <title>Clientes · Admin TiendaTech</title>
 <link rel="stylesheet" href="/css/style.css" />
 </head>
-<body class="theme-light">
+<body>
 <div class="admin-shell">
     <aside class="admin-sidebar" id="admin-sidebar-placeholder"></aside>
     <main class="admin-main">
@@ -43,8 +43,17 @@ requireAuthAdmin();
 renderAdminSidebar('clientes');
 document.getElementById('topbar').innerHTML = adminHeader(
     'Clientes', 'Listado, búsqueda y filtro por etapa. Abre un cliente para ver su ficha completa.',
+    '<button class="btn btn-outline" onclick="exportar()">Exportar CSV</button>' +
     '<button class="btn btn-primary" onclick="formNuevo()">Nuevo cliente</button>'
 );
+
+function exportar() {
+    descargarCSV('clientes', ROWS.map((c) => ({
+        id: c.id, nombre: c.nombre, correo: c.correo, telefono: c.telefono || '',
+        empresa: c.empresa || '', ciudad: c.ciudad || '', etapa_crm: c.etapa_crm,
+        estado: c.estado_cliente, registro: (c.fecha_registro || '').slice(0, 10),
+    })));
+}
 
 let ROWS = [];
 async function cargar() {

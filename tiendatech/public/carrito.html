@@ -29,6 +29,7 @@
 <script src="/js/toast.js"></script>
 <script src="/js/layout.js"></script>
 <script src="/js/chatbot.js"></script>
+<script src="/js/garantia.js"></script>
 <script>
 const cliente = Sesion.cliente();
 if (!cliente) irALogin();
@@ -39,6 +40,7 @@ let DIRECCIONES = [];
 let METODOS = [];
 let RECOMP = { puntos: 0, valor_punto: 0.10 };
 let SUBTOTAL = 0;
+let GAR_TOTAL = 0;
 const MARCA_LABEL = { visa: 'Visa', mastercard: 'Mastercard', amex: 'American Express', otra: 'Tarjeta' };
 
 async function cargarCarrito() {
@@ -64,9 +66,13 @@ async function cargarCarrito() {
     }
 
     let subtotal = 0;
+    let garTotal = 0;
     const filas = items.map((i) => {
         const linea = i.precio * i.cantidad;
+        const gCosto = Number(i.garantia_costo || 0);
         subtotal += Number(linea);
+        garTotal += gCosto;
+        const claveActual = i.garantia_clave || 'none';
         return `
         <div class="card cart-line">
             <img class="cart-thumb" src="${i.imagen_url || '/img/producto.svg'}" referrerpolicy="no-referrer" onerror="this.onerror=null;this.src='/img/producto.svg'"
@@ -79,14 +85,26 @@ async function cargarCarrito() {
                     <span class="qty-val">${i.cantidad}</span>
                     <button onclick="cambiarCantidad(${i.id}, ${i.cantidad + 1}, ${i.stock})" ${i.cantidad >= i.stock ? 'disabled' : ''}>+</button>
                 </div>
+                <div class="cart-gar">
+                    <span class="ic-gar">${icon('shield', 13)}</span>
+                    <select onchange="cambiarGarantia(${i.id}, this.value)">
+                        ${PLANES_GARANTIA.map((g) => {
+                            const c = costoGarantia(i.precio, g.clave) * i.cantidad;
+                            return `<option value="${g.clave}" ${g.clave === claveActual ? 'selected' : ''}>${g.label}${c > 0 ? ' · +' + formatoMoneda(c) : ''}</option>`;
+                        }).join('')}
+                    </select>
+                </div>
             </div>
             <div class="cart-sub">
-                ${formatoMoneda(linea)}
+                ${formatoMoneda(linea + gCosto)}
+                ${gCosto > 0 ? `<div style="font-size:.72rem;color:var(--text-muted);font-weight:400">incl. garantía ${formatoMoneda(gCosto)}</div>` : ''}
                 <div><button class="btn btn-ghost btn-sm" style="padding:2px 6px" onclick="quitarDelCarrito(${i.id})">Quitar</button></div>
             </div>
         </div>`;
     }).join('');
 
+    subtotal += garTotal;
+    GAR_TOTAL = garTotal;
     SUBTOTAL = subtotal;
     const impuestos = subtotal * 0.16;
     const envio = subtotal >= ENVIO_GRATIS_DESDE ? 0 : COSTO_ENVIO;
@@ -127,6 +145,8 @@ async function cargarCarrito() {
         ${filas}
         <div class="card" style="margin-top:16px">
             ${shipHint}
+            <div style="display:flex;justify-content:space-between;margin-bottom:6px;color:var(--text-muted)"><span>Productos</span><span class="mono">${formatoMoneda(subtotal - garTotal)}</span></div>
+            ${garTotal > 0 ? `<div style="display:flex;justify-content:space-between;margin-bottom:6px;color:var(--text-muted)"><span>Garantías extendidas</span><span class="mono">${formatoMoneda(garTotal)}</span></div>` : ''}
             <div style="display:flex;justify-content:space-between;margin-bottom:6px"><span>Subtotal</span><span class="mono">${formatoMoneda(subtotal)}</span></div>
             <div style="display:flex;justify-content:space-between;margin-bottom:6px;color:var(--text-muted)"><span>IVA (16%)</span><span class="mono">${formatoMoneda(impuestos)}</span></div>
             <div style="display:flex;justify-content:space-between;margin-bottom:6px;color:var(--text-muted)"><span>Envío</span><span class="mono">${envio === 0 ? 'Gratis' : formatoMoneda(envio)}</span></div>
@@ -211,6 +231,13 @@ async function cambiarCantidad(itemId, nueva, stock) {
         cargarCarrito(); actualizarBadgeCarrito();
     } catch (e) { toast(e.message, 'error'); }
 }
+async function cambiarGarantia(itemId, clave) {
+    try {
+        await api(`/carrito/${itemId}`, { method: 'PUT', body: { garantia: clave } });
+        toast(clave === 'none' ? 'Garantía quitada' : 'Garantía actualizada', 'ok');
+        cargarCarrito();
+    } catch (e) { toast(e.message, 'error'); }
+}
 async function quitarDelCarrito(itemId) {
     try {
         await api(`/carrito/${itemId}`, { method: 'DELETE' });
@@ -231,11 +258,11 @@ document.getElementById('btn-vaciar').addEventListener('click', async () => {
 // Si es tarjeta nueva la valida y (si se pidió) la guarda antes de comprar.
 async function resolverMetodoPago() {
     const v = document.getElementById('metodo-pago').value;
-    if (v === 'spei') return 'Transferencia SPEI';
-    if (v === 'tienda') return 'Pago en tienda';
+    if (v === 'spei') return { texto: 'Transferencia SPEI', tipo: 'spei' };
+    if (v === 'tienda') return { texto: 'Pago en tienda', tipo: 'tienda' };
     if (v.startsWith('mp:')) {
         const m = METODOS.find((x) => String(x.id) === v.slice(3));
-        return m ? `Tarjeta ${MARCA_LABEL[m.marca] || ''} ****${m.ultimos4}`.replace(/\s+/g, ' ').trim() : 'Tarjeta';
+        return { texto: (m ? `Tarjeta ${MARCA_LABEL[m.marca] || ''} ****${m.ultimos4}`.replace(/\s+/g, ' ').trim() : 'Tarjeta'), tipo: 'tarjeta' };
     }
     // Tarjeta nueva
     const numero = document.getElementById('tn-num').value.replace(/\s/g, '');
@@ -256,7 +283,7 @@ async function resolverMetodoPago() {
             });
         } catch (e) { /* si falla el guardado, igual se puede comprar */ }
     }
-    return `Tarjeta ${marca} ****${numero.slice(-4)}`.replace(/\s+/g, ' ');
+    return { texto: `Tarjeta ${marca} ****${numero.slice(-4)}`.replace(/\s+/g, ' '), tipo: 'tarjeta' };
 }
 
 async function confirmarCompra() {
@@ -264,8 +291,8 @@ async function confirmarCompra() {
     const direccion = document.getElementById('direccion').value.trim();
     if (!direccion) { toast('Ingresa o elige una dirección de envío', 'warn'); return; }
 
-    const metodo_pago = await resolverMetodoPago();
-    if (!metodo_pago) return;
+    const mp = await resolverMetodoPago();
+    if (!mp) return;
 
     const btn = document.getElementById('btn-comprar');
     btn.disabled = true; btn.textContent = 'Procesando…';
@@ -273,8 +300,8 @@ async function confirmarCompra() {
         const pedido = await api('/pedidos', {
             method: 'POST',
             body: {
-                items: items.map((i) => ({ producto_id: i.producto_id, cantidad: i.cantidad })),
-                metodo_pago, direccion_envio: direccion,
+                items: items.map((i) => ({ producto_id: i.producto_id, cantidad: i.cantidad, garantia: i.garantia_clave || 'none' })),
+                metodo_pago: mp.texto, metodo_tipo: mp.tipo, direccion_envio: direccion,
                 puntos_canjear: puntosCanje(),
             }
         });

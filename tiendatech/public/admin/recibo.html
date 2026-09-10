@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Comprobante · Admin TiendaTech</title>
+<link rel="stylesheet" href="/css/style.css" />
+</head>
+<body>
+<div class="recibo-page">
+    <div class="recibo-actions no-print">
+        <a href="/admin/pedidos.html" class="btn btn-ghost btn-sm">← Volver a pedidos</a>
+        <button class="btn btn-primary btn-sm" onclick="window.print()">Imprimir / Guardar PDF</button>
+    </div>
+    <div id="doc"><div class="empty-state">Cargando comprobante…</div></div>
+</div>
+
+<script src="/js/theme.js"></script>
+<script src="/js/api.js"></script>
+<script src="/js/icons.js"></script>
+<script src="/js/qrcode.min.js"></script>
+<script src="/js/recibo-render.js"></script>
+<script src="/admin/js/admin-layout.js"></script>
+<script>
+requireAuthAdmin();
+const id = new URLSearchParams(location.search).get('id');
+const doc = document.getElementById('doc');
+
+(async () => {
+    if (!id) { doc.innerHTML = '<div class="empty-state">Falta el número de pedido.</div>'; return; }
+    try {
+        const d = await api('/pedidos/' + id + '/recibo');
+        doc.innerHTML = renderRecibo(d);
+    } catch (e) {
+        doc.innerHTML = `<div class="empty-state">${e.message}<br><a href="/admin/pedidos.html">Volver a pedidos</a></div>`;
+    }
+})();
+</script>
+</body>
+</html>

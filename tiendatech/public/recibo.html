@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Comprobante · TiendaTech</title>
+<link rel="stylesheet" href="/css/style.css" />
+</head>
+<body>
+<div class="recibo-page">
+    <div class="recibo-actions no-print">
+        <a href="/pedidos.html" class="btn btn-ghost btn-sm">← Mis pedidos</a>
+        <button class="btn btn-primary btn-sm" onclick="window.print()">Imprimir / Guardar PDF</button>
+    </div>
+    <div id="doc"><div class="empty-state">Cargando comprobante…</div></div>
+</div>
+
+<script src="/js/theme.js"></script>
+<script src="/js/api.js"></script>
+<script src="/js/icons.js"></script>
+<script src="/js/qrcode.min.js"></script>
+<script src="/js/recibo-render.js"></script>
+<script>
+const id = new URLSearchParams(location.search).get('id');
+const doc = document.getElementById('doc');
+
+(async () => {
+    if (!id) { doc.innerHTML = '<div class="empty-state">Falta el número de pedido.</div>'; return; }
+    const token = localStorage.getItem('tt_token');
+    try {
+        const res = await fetch('/api/pedidos/' + id + '/recibo', { headers: token ? { Authorization: 'Bearer ' + token } : {} });
+        const d = await res.json();
+        if (!res.ok) throw new Error(d.message || 'No se pudo cargar el comprobante');
+        doc.innerHTML = renderRecibo(d);
+    } catch (e) {
+        doc.innerHTML = `<div class="empty-state">${e.message}<br><a href="/pedidos.html">Ir a mis pedidos</a></div>`;
+    }
+})();
+</script>
+</body>
+</html>

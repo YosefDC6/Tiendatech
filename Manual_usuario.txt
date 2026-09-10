@@ -68,9 +68,9 @@ ROLES INTERNOS (entran por /admin/login.html; el menu se adapta al rol)
    - ADMINISTRADOR : acceso total, incluida la gestion de cuentas y equipo.
    - VENDEDOR      : todo el CRM y la tienda; NO gestiona cuentas.
    - SOPORTE       : Dashboard, Clientes, Interacciones, Evaluaciones,
-                     Soporte, Reportes, Mi actividad, Configuracion.
-   - ALMACEN       : Dashboard, Pedidos, Inventario, Analitica chatbot,
-                     Mi actividad, Configuracion.
+                     Soporte, Garantias, Reportes, Mi actividad, Config.
+   - ALMACEN       : Dashboard, Pedidos, Inventario, Garantias, Analitica
+                     chatbot, Mi actividad, Configuracion.
    El menu lateral solo muestra las secciones permitidas para ese rol, y si
    alguien abre por URL una seccion que no le toca, se le manda al Dashboard.
 
@@ -129,8 +129,33 @@ Seguridad de sesion
    - Boton "Agregar al carrito".
    - Resenas del producto: promedio de estrellas y comentarios. Si has
      iniciado sesion, puedes dejar o editar tu resena.
+   - Boton "Comparar" (tambien en cada tarjeta del catalogo): ver 3.3b.
    - Si no hay imagen del producto se muestra una imagen generica; nunca
      aparece una imagen rota.
+
+3.3b COMPARADOR DE PRODUCTOS
+   - En cada tarjeta del catalogo y en la ficha hay un boton "Comparar".
+   - Al marcar productos (hasta 4) aparece una barra fija abajo con los
+     elegidos y un boton "Comparar".
+   - "Comparar" abre  comparar.html?ids=...  con una tabla lado a lado:
+     precio, marca, categoria, procesador, RAM, almacenamiento, grafica,
+     pantalla, usos, disponibilidad y calificacion. Resalta en verde el
+     mejor valor de cada fila (precio mas bajo, mas RAM, mas stock, etc.).
+   - Desde ahi puedes agregar al carrito o quitar una columna.
+
+3.3c GARANTIA EXTENDIDA
+   - Al abrir un producto, ademas de la cantidad hay un selector de
+     "Garantia extendida": Sin garantia / Basica 12 meses / Extendida 24
+     meses / Total 36 meses. El costo es un % del precio del producto
+     (6% / 12% / 18%) y se ve en la opcion.
+   - Al agregar al carrito se guarda con esa linea. En el carrito cada
+     producto tiene su propio selector para cambiar o quitar la garantia,
+     y el resumen muestra una linea "Garantias extendidas".
+   - Al comprar, por cada linea con garantia se genera un CERTIFICADO con
+     folio (GAR-1000xx), un CODIGO para validarla, plazo (meses) y fechas
+     de inicio / vencimiento. Aparece en el comprobante, en la pantalla de
+     gracias y en "Mis garantias".
+   - Si se cancela el pedido, sus garantias quedan "canceladas".
 
 3.4  CHATBOT ASESOR  (boton flotante abajo a la derecha, en toda la tienda)
    - En la primera visita muestra una burbuja invitando a usarlo.
@@ -156,8 +181,22 @@ Seguridad de sesion
         * Pago en tienda.
      Nota: es una demo, no se cobra nada real. Del numero de tarjeta solo se
      guardan la marca y los ultimos 4 digitos; el CVV nunca se guarda.
-   - Al confirmar: se descuenta stock, se generan/canjean puntos y se va a la
-     pantalla de agradecimiento (gracias.html) con el detalle del pedido.
+   - Al confirmar SIEMPRE se genera un COMPROBANTE (recibo.html), se guarda
+     en la cuenta y lo puede ver el equipo. Segun el metodo:
+        * Tarjeta  -> el pedido queda "Confirmado" y "Pagado"; los puntos se
+                      acreditan al instante. El comprobante es el recibo de
+                      compra con todos los datos.
+        * SPEI     -> el pedido queda "Pago pendiente". El comprobante es una
+                      FICHA DE PAGO con banco, beneficiario, CLABE, concepto/
+                      referencia, monto exacto y fecha limite.
+        * En tienda-> el pedido queda "Pago pendiente". La ficha de pago trae
+                      un CODIGO y un QR para presentar en caja, mas el monto
+                      y la fecha limite.
+     En SPEI y tienda el stock se reserva, pero los puntos GANADOS solo se
+     acreditan cuando el equipo registra el pago. Si se cancela el pedido se
+     devuelven el stock y los puntos que se hubieran canjeado.
+   - Boton "Ya realice el pago": el cliente avisa al equipo (no confirma el
+     pago por si solo).
 
 3.6  MI CUENTA  (menu arriba a la derecha -> "Perfil")
    Cada seccion es su propia pagina:
@@ -168,9 +207,20 @@ Seguridad de sesion
       - Ultimos 3 pedidos y accesos rapidos.
 
    Mis pedidos (pedidos.html)
-      - Historial con estado (Pendiente, Confirmado, En preparacion, Enviado,
-        Entregado, Cancelado) y barra de progreso.
+      - Cada pedido muestra un RASTREO VISUAL de 4 etapas con iconos y fecha:
+        Confirmado -> En preparacion -> Enviado -> Entregado. La etapa actual
+        va resaltada y debajo hay una frase ("Tu pedido va en camino…",
+        "Entregado. ¡Gracias!"). En pantallas chicas el rastreo se ve como
+        linea de tiempo vertical.
+      - Si el pago esta pendiente, en vez del rastreo sale un aviso ambar con
+        la referencia y la instruccion; el rastreo arranca al confirmarse el
+        pago. Si el pedido esta cancelado, sale un aviso rojo.
       - "Ver detalle" abre productos, importes y guia de envio.
+      - "Comprobante" / "Ficha de pago" abre el recibo del pedido.
+      - En pedidos con pago pendiente: boton "Ya realice el pago".
+      - En pedidos entregados: "Dejar resena" para calificar cada producto.
+   La pantalla de agradecimiento (gracias.html) tambien muestra un mini
+   rastreo de las 4 etapas.
 
    Club de puntos (recompensas.html)
       - Saldo de puntos y su valor en dinero.
@@ -183,6 +233,13 @@ Seguridad de sesion
 
    Mis resenas (resenas.html)
       - Todas las resenas que has dejado; se pueden editar o borrar.
+
+   Mis garantias (garantias.html)
+      - Certificados de garantia extendida de tus compras, con folio,
+        codigo para validar, vigencia (inicio -> vence) y estado (Activa,
+        Usada, Vencida, Cancelada).
+      - "Usar la garantia": describes la falla y el equipo la revisa. Queda
+        marcada "en revision" hasta que la resuelvan.
 
    Direcciones (direcciones.html)
       - Alta/edicion/borrado de direcciones; marcar una como predeterminada.
@@ -237,8 +294,9 @@ Cada pantalla tiene un encabezado con titulo y, si aplica, un boton de accion.
 4.2  CLIENTES  (admin/clientes.html)  [CRM]
    - Listado con buscador (nombre, correo, empresa) y filtro por etapa.
    - Columnas: ID, nombre, correo, empresa, etapa CRM, estado.
-   - "Nuevo cliente": crea la cuenta con una contrasena temporal y abre su
-     ficha.
+   - "Nuevo cliente": crea la cuenta (contrasena editable, temporal por
+     defecto) y abre su ficha.
+   - "Exportar CSV": descarga el listado tal como esta filtrado.
    - Clic en una fila o en "Ver ficha" -> ficha del cliente.
 
 4.3  FICHA DE CLIENTE  (admin/cliente.html?id=...)  [CRM]
@@ -250,19 +308,33 @@ Cada pantalla tiene un encabezado con titulo y, si aplica, un boton de accion.
    - Pestanas:
         Informacion  : telefono, empresa, ciudad, registro, ultimo acceso,
                        etapa CRM, estado, Club de puntos, codigo de socio.
+        Pedidos      : historial de compras del cliente (orden, fecha,
+                       productos, total, estado) con "Detalle" expandible.
         Interacciones: linea de tiempo de todas las interacciones del cliente
                        (llamada, correo, reunion, chat, soporte).
         Evaluaciones : resenas que el cliente ha dejado en productos.
    - "Cambiar etapa": Prospecto -> Activo -> Frecuente -> Inactivo. El paso a
      "Activo" tambien ocurre solo al confirmarse la primera compra.
-   - "Nueva interaccion": registra una llamada/correo/reunion/chat con una
-     descripcion; queda ligada al vendedor que la registro.
+   - "Nueva interaccion": abre el SIMULADOR (ver 4.4); queda ligada al
+     usuario interno que la registro.
 
 4.4  INTERACCIONES  (admin/interacciones.html)  [CRM]
    - Todas las interacciones de todos los clientes, con filtros por texto,
-     tipo y rango de fechas.
-   - "Nueva interaccion": elige el cliente, el tipo y escribe la descripcion.
-   - La columna "Registro" indica quien la capturo.
+     tipo y rango de fechas. La columna "Registro" dice quien la capturo.
+   - "Nueva interaccion" abre un SIMULADOR con 5 modos; cada uno arma la
+     descripcion que se guarda:
+        Llamada : muestra el telefono, boton "Iniciar llamada" -> "Llamando"
+                  -> cronometro -> "Colgar"; luego eliges el resultado
+                  (Contesto / No contesto / Buzon) y agregas notas.
+        Correo  : "Para" con el correo del cliente, plantillas (seguimiento,
+                  cotizacion, bienvenida, recordatorio de pago), asunto y
+                  cuerpo. "Enviar correo" (simulado).
+        Reunion : fecha, hora, modalidad (videollamada/presencial/telefono)
+                  y agenda. "Agendar reunion".
+        Chat    : mini conversacion con respuestas rapidas; "Cerrar chat".
+        Soporte : prioridad + nota; enlace al gestor de tickets para
+                  seguimiento formal con folio.
+   - En la ficha de un cliente el simulador ya viene con ese cliente fijo.
 
 4.5  EVALUACIONES  (admin/evaluaciones.html)  [CRM]
    - Todas las resenas de productos hechas por clientes.
@@ -275,16 +347,39 @@ Cada pantalla tiene un encabezado con titulo y, si aplica, un boton de accion.
    - Al abrir un ticket: hilo de mensajes, selector de estado y prioridad,
      y campo para responder al cliente.
 
+4.6b GARANTIAS  (admin/garantias.html)  [CRM]
+   - "Validar garantia": escribe el codigo que trae el cliente y muestra si
+     esta VALIDA (verde) o no (roja), con producto, cliente, vigencia y
+     dias restantes.
+   - Indicadores: activas, con reclamo, usadas, vencidas/canceladas.
+   - Tabla de todas las garantias con filtro por estado y busqueda (folio,
+     codigo, cliente, producto, pedido). Las que tienen un reclamo del
+     cliente llevan una etiqueta "reclamo".
+   - Al abrir una: "Marcar como usada" (pide una nota de resolucion),
+     "Cerrar reclamo sin usar" o "Marcar vencida".
+
 4.7  REPORTES  (admin/reportes.html)  [CRM]
    - Rango de fechas ("Del ... al ...") o "Todo el historico".
    - KPIs: clientes totales, activos, interacciones del periodo, clientes sin
      interaccion (30+ dias), nuevos clientes del periodo, ventas del periodo.
    - Graficas: interacciones por tipo y clientes por etapa.
+   - "Exportar CSV": descarga todos los indicadores del periodo.
 
 4.8  PEDIDOS  (admin/pedidos.html)  [TIENDA]
-   - Listado con filtro por estado.
-   - Cambiar el estado de un pedido desde la misma fila.
-   - "Detalle": productos, subtotal, IVA, envio, descuento por puntos y total.
+   - Listado con filtro por estado. Cada fila muestra el estado y el pago
+     como pildoras de color. Clic en la fila o en "Gestionar" abre el panel.
+   - Panel de gestion:
+        * PIPELINE visual de 5 pasos (Pendiente -> Confirmado -> Procesando
+          -> Enviado -> Entregado). Haz clic en un paso para mover el pedido
+          ahi (te pide confirmar si es un retroceso). "Cancelar pedido"
+          aparte.
+        * Bloque de PAGO: si esta pendiente, muestra el metodo y la
+          referencia y un boton grande "Marcar pago recibido" -> pasa a
+          "Confirmado", otorga los puntos y actualiza las metricas del
+          cliente. Si el cliente pulso "Ya realice el pago", lo indica.
+        * Productos, totales y "Ver comprobante".
+   - "Exportar CSV": descarga los pedidos tal como estan filtrados.
+   - Enlace directo:  /admin/pedidos.html?open=<id>  abre ese panel.
 
 4.9  INVENTARIO  (admin/productos.html)  [TIENDA]
    - Catalogo completo: ID, producto, categoria, precio, stock, estado.
@@ -545,13 +640,15 @@ Estructura
      db.config.js         datos de conexion a PostgreSQL
      db/database.sql      esquema + triggers + datos, re-ejecutable
      public/              front estatico (HTML + CSS + JS, sin framework)
-       index.html, carrito.html, gracias.html, ayuda.html, login.html,
-       registro.html, socio.html
+       index.html, carrito.html, gracias.html, recibo.html, ayuda.html,
+       login.html, registro.html, socio.html, comparar.html, garantias.html
        perfil.html, pedidos.html, recompensas.html, favoritos.html,
        resenas.html, direcciones.html, pagos.html, soporte.html,
        datos.html, seguridad.html, preferencias.html
        js/  api.js theme.js icons.js toast.js layout.js chatbot.js
-            cuenta.js qrcode.min.js
+            cuenta.js comparar.js garantia.js recibo-render.js qrcode.min.js
+       admin/js/  admin-layout.js  interaccion-sim.js
+       admin/  ... garantias.html  recibo.html
        css/ style.css
        img/ producto.svg (imagen generica de producto)
        admin/  login.html dashboard.html clientes.html cliente.html

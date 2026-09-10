@@ -125,6 +125,8 @@
 <script src="/js/toast.js"></script>
 <script src="/js/layout.js"></script>
 <script src="/js/chatbot.js"></script>
+<script src="/js/comparar.js"></script>
+<script src="/js/garantia.js"></script>
 <script>
 let TODOS_LOS_PRODUCTOS = [];
 let BUSQUEDA = '';   // el buscador vive en la navbar; aquí solo guardamos el término
@@ -229,6 +231,7 @@ function tarjetasProducto(lista) {
                     <button class="btn btn-outline btn-sm" onclick="verProducto(${p.id})">Ver</button>
                     <button class="btn btn-primary btn-sm" ${p.stock === 0 ? 'disabled' : ''} onclick="agregarAlCarrito(${p.id})">${p.stock === 0 ? 'Sin stock' : 'Agregar'}</button>
                 </div>
+                <button class="cmp-toggle ${Comparar.tiene(p.id) ? 'on' : ''}" data-cmp="${p.id}" aria-pressed="${Comparar.tiene(p.id)}" onclick="alternarComparar(event, ${p.id})">${icon('grid', 13)} Comparar</button>
             </div>
         </div>
     `).join('');
@@ -354,6 +357,15 @@ function verProducto(id) {
                 <span class="qty-val" id="modal-qty">1</span>
                 <button type="button" onclick="ajustarQty(1, ${p.stock})">+</button>
             </div>
+        </div>
+        <div class="field" style="margin-top:6px">
+            <label>Garantía extendida <span style="font-weight:400;color:var(--text-muted)">(el producto ya incluye la del fabricante)</span></label>
+            <select id="modal-garantia">
+                ${PLANES_GARANTIA.map((g) => {
+                    const c = costoGarantia(p.precio, g.clave);
+                    return `<option value="${g.clave}">${g.label}${c > 0 ? ' · +' + formatoMoneda(c) : ''}</option>`;
+                }).join('')}
+            </select>
         </div>` : ''}
         <div style="display:flex;gap:10px;margin-top:6px">
             <button class="btn btn-primary" style="flex:1" ${p.stock === 0 ? 'disabled' : ''} onclick="agregarAlCarrito(${p.id}, true)">
@@ -361,6 +373,7 @@ function verProducto(id) {
             </button>
             <button class="btn btn-outline ${fav ? 'fav-on' : ''}" id="modal-fav" onclick="toggleFav(event, ${p.id}, true)">${icon('heart', 16)} ${fav ? 'Guardado' : 'Guardar'}</button>
         </div>
+        <button class="cmp-toggle ${Comparar.tiene(p.id) ? 'on' : ''}" data-cmp="${p.id}" style="margin-top:10px" aria-pressed="${Comparar.tiene(p.id)}" onclick="alternarComparar(event, ${p.id})">${icon('grid', 13)} Añadir a comparar</button>
         <div class="modal-resenas" id="modal-resenas"><div style="color:var(--text-muted);font-size:.85rem">Cargando reseñas…</div></div>
     `;
     document.getElementById('modal-producto').classList.add('open');
@@ -435,12 +448,21 @@ async function agregarAlCarrito(productoId, cerrarModal) {
     if (!cliente) { irALogin('Inicia sesión para comprar'); return; }
     const qtyEl = document.getElementById('modal-qty');
     const cantidad = (cerrarModal && qtyEl) ? Number(qtyEl.textContent) || 1 : 1;
+    const gEl = document.getElementById('modal-garantia');
+    const garantia = (cerrarModal && gEl) ? gEl.value : 'none';
     try {
-        await api('/carrito', { method: 'POST', body: { producto_id: productoId, cantidad } });
+        await api('/carrito', { method: 'POST', body: { producto_id: productoId, cantidad, garantia } });
         actualizarBadgeCarrito();
         toast(cantidad > 1 ? `${cantidad} agregados al carrito` : 'Agregado al carrito', 'ok');
         if (cerrarModal) document.getElementById('modal-producto').classList.remove('open');
     } catch (e) { toast(e.message, 'error'); }
+}
+
+function alternarComparar(ev, productoId) {
+    ev.stopPropagation();
+    const on = Comparar.toggle(productoId);
+    const btn = ev.currentTarget;
+    if (btn && on !== false) { btn.classList.toggle('on', on); btn.setAttribute('aria-pressed', on); }
 }
 
 async function toggleFav(ev, productoId, desdeModal) {

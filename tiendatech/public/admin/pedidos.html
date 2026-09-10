@@ -6,7 +6,7 @@
 <title>Pedidos · Admin TiendaTech</title>
 <link rel="stylesheet" href="/css/style.css" />
 </head>
-<body class="theme-light">
+<body>
 <div class="admin-shell">
     <aside class="admin-sidebar" id="admin-sidebar-placeholder"></aside>
     <main class="admin-main">
@@ -23,7 +23,7 @@
 
         <div class="table-wrap">
             <table>
-                <thead><tr><th>Orden</th><th>Cliente</th><th>Fecha</th><th>Total</th><th>Estado</th><th>Actualizar</th><th></th></tr></thead>
+                <thead><tr><th>Orden</th><th>Cliente</th><th>Fecha</th><th>Total</th><th>Estado</th><th>Pago</th><th></th></tr></thead>
                 <tbody id="tabla-pedidos"><tr><td colspan="7">Cargando…</td></tr></tbody>
             </table>
         </div>
@@ -31,7 +31,7 @@
 </div>
 
 <div class="modal-overlay" id="modal-pedido">
-    <div class="modal" style="max-width:560px" id="modal-pedido-body"></div>
+    <div class="modal" style="max-width:620px" id="modal-pedido-body"></div>
 </div>
 
 <script src="/js/theme.js"></script>
@@ -42,43 +42,110 @@
 <script>
 requireAuthAdmin();
 renderAdminSidebar('pedidos');
-document.getElementById('topbar').innerHTML = adminHeader('Pedidos', 'Seguimiento y actualización de estado de envío.');
+document.getElementById('topbar').innerHTML = adminHeader('Pedidos', 'Seguimiento y actualización de estado de envío.',
+    '<button class="btn btn-outline" onclick="exportar()">Exportar CSV</button>');
 
 const ESTADOS = ['pendiente', 'confirmado', 'procesando', 'enviado', 'entregado', 'cancelado'];
+const FLUJO = ['pendiente', 'confirmado', 'procesando', 'enviado', 'entregado'];
+let PEDIDOS = [];
+let DET = null; // pedido abierto en el modal
+
+function exportar() {
+    descargarCSV('pedidos', PEDIDOS.map((p) => ({
+        orden: p.numero_orden, cliente: p.cliente_nombre, correo: p.cliente_correo,
+        fecha: (p.fecha_pedido || '').slice(0, 10), total: p.total, estado: p.estado,
+        metodo_pago: p.metodo_pago || '',
+    })));
+}
 
 async function cargarPedidos() {
     const estado = document.getElementById('f-estado').value;
     const params = estado && estado !== 'Todos' ? `?estado=${estado}` : '';
     const pedidos = await api('/admin/pedidos' + params);
+    PEDIDOS = pedidos;
     document.getElementById('tabla-pedidos').innerHTML = pedidos.map((p) => `
-        <tr>
+        <tr onclick="verDetalle(${p.id})" style="cursor:pointer">
             <td class="mono">${p.numero_orden}</td>
             <td>${p.cliente_nombre}<div style="color:var(--text-muted);font-size:.78rem">${p.cliente_correo}</div></td>
             <td>${formatoFecha(p.fecha_pedido)}</td>
             <td class="mono">${formatoMoneda(p.total)}</td>
-            <td><span class="tag">${p.estado}</span></td>
-            <td>
-                <select onchange="cambiarEstado(${p.id}, this.value)">
-                    ${ESTADOS.map((e) => `<option value="${e}" ${e === p.estado ? 'selected' : ''}>${e}</option>`).join('')}
-                </select>
-            </td>
-            <td><button class="btn btn-outline btn-sm" onclick="verDetalle(${p.id})">Detalle</button></td>
+            <td><span class="estado-pill e-${p.estado}">${p.estado}</span></td>
+            <td><span class="estado-pill pago-pill pp-${p.pago_estado}">${p.pago_estado === 'pagado' ? 'Pagado' : 'Pendiente'}</span></td>
+            <td><button class="btn btn-outline btn-sm" onclick="event.stopPropagation();verDetalle(${p.id})">Gestionar</button></td>
         </tr>
     `).join('') || '<tr><td colspan="7">No hay pedidos con ese filtro.</td></tr>';
 }
 
 async function cambiarEstado(id, estado) {
-    await api(`/admin/pedidos/${id}/estado`, { method: 'PUT', body: { estado } });
-    cargarPedidos();
+    try {
+        await api(`/admin/pedidos/${id}/estado`, { method: 'PUT', body: { estado } });
+        toast('Estado actualizado a "' + estado + '"', 'ok');
+        if (DET && DET.id === id) await verDetalle(id);
+        cargarPedidos();
+    } catch (e) { toast(e.message, 'error'); }
+}
+
+async function moverEstado(id, destino, actual) {
+    const iDest = FLUJO.indexOf(destino), iAct = FLUJO.indexOf(actual);
+    if (destino === actual) return;
+    if (iDest < iAct && !(await confirmar(`¿Regresar el pedido a "${destino}"?`, { okText: 'Regresar' }))) return;
+    cambiarEstado(id, destino);
+}
+
+async function cancelarPedidoAdmin(id) {
+    if (!(await confirmar('¿Cancelar este pedido? Esto NO restaura stock automáticamente desde el panel.', { okText: 'Cancelar pedido', peligro: true }))) return;
+    cambiarEstado(id, 'cancelado');
+}
+
+function pipeline(d) {
+    if (d.estado === 'cancelado') {
+        return `<div class="pago-box" style="border-color:var(--danger);background:color-mix(in srgb,var(--danger) 8%,transparent)">
+            <h4>${icon('x', 15)} Pedido cancelado</h4>
+            <button class="btn btn-outline btn-sm" onclick="cambiarEstado(${d.id}, 'pendiente')">Reactivar como pendiente</button>
+        </div>`;
+    }
+    const iAct = FLUJO.indexOf(d.estado);
+    const completo = d.estado === 'entregado';
+    return `
+        <div class="pipe">
+            ${FLUJO.map((e, i) => {
+                const done = completo || i < iAct;
+                const actual = !done && i === iAct;
+                return `
+                <div class="pipe-step ${done ? 'done' : ''} ${actual ? 'actual' : ''}" onclick="moverEstado(${d.id}, '${e}', '${d.estado}')" title="${e}">
+                    <div class="pd">${done ? icon('check', 13) : (i + 1)}</div>
+                    <div class="pl">${['Pendiente', 'Confirmado', 'Procesando', 'Enviado', 'Entregado'][i]}</div>
+                </div>`;
+            }).join('')}
+        </div>
+        <div style="text-align:right;margin-top:-8px;margin-bottom:8px">
+            <button class="btn btn-ghost btn-sm" style="color:var(--danger)" onclick="cancelarPedidoAdmin(${d.id})">Cancelar pedido</button>
+        </div>`;
 }
 
 async function verDetalle(id) {
     const d = await api(`/pedidos/${id}/detalle`);
+    DET = d;
     document.getElementById('modal-pedido-body').innerHTML = `
         <button class="modal-close" onclick="document.getElementById('modal-pedido').classList.remove('open')">${icon('x', 18)}</button>
-        <h3>${d.numero_orden}</h3>
-        <p class="mono" style="margin-bottom:4px">${formatoFecha(d.fecha_pedido)} · <span class="tag">${d.estado}</span></p>
-        <p style="margin-bottom:12px">${d.direccion_envio || 'Sin dirección'} · Pago: ${d.metodo_pago || '—'}</p>
+        <h3 style="margin-bottom:2px">${d.numero_orden}</h3>
+        <p style="margin:0 0 12px;color:var(--text-muted);font-size:.85rem">${formatoFecha(d.fecha_pedido)} · ${d.direccion_envio || 'Sin dirección'}</p>
+
+        <label class="sim-lbl">Estado del pedido</label>
+        ${pipeline(d)}
+
+        ${d.pago_estado === 'pendiente' ? `
+        <div class="pago-box pendiente">
+            <h4>${icon('clock', 15)} Pago pendiente · ${d.metodo_pago || ''}</h4>
+            <div class="pb-ref">${d.pago_referencia || '—'}</div>
+            <div class="pb-sub">${d.pago_reportado ? 'El cliente reportó que ya pagó. Verifica y registra el pago.' : 'El cliente aún no reporta el pago.'}</div>
+            <button class="btn btn-primary btn-cobro" onclick="registrarPago(${d.id})">${icon('check', 15)} Marcar pago recibido</button>
+        </div>` : `
+        <div class="pago-box pagado">
+            <h4>${icon('check', 15)} Pago confirmado</h4>
+            <div class="pb-sub" style="margin:0">${d.metodo_pago || '—'} · ${formatoFecha(d.fecha_confirmacion || d.fecha_pedido)}</div>
+        </div>`}
+
         <div class="table-wrap" style="margin-bottom:14px">
             <table>
                 <thead><tr><th>Producto</th><th>Cant.</th><th>P. unit.</th><th>Subtotal</th></tr></thead>
@@ -99,12 +166,26 @@ async function verDetalle(id) {
         <div style="display:flex;justify-content:space-between;color:var(--text-muted)"><span>Envío</span><span class="mono">${Number(d.envio) === 0 ? 'Gratis' : formatoMoneda(d.envio)}</span></div>
         ${Number(d.descuento) > 0 ? `<div style="display:flex;justify-content:space-between;color:var(--success)"><span>Descuento Club de puntos</span><span class="mono">-${formatoMoneda(d.descuento)}</span></div>` : ''}
         <div style="display:flex;justify-content:space-between;font-weight:700;font-size:1.05rem"><span>Total</span><span class="mono">${formatoMoneda(d.total)}</span></div>
+        <a class="btn btn-outline btn-sm" style="width:100%;margin-top:14px" href="/admin/recibo.html?id=${d.id}" target="_blank" rel="noopener">Ver comprobante</a>
     `;
     document.getElementById('modal-pedido').classList.add('open');
 }
 
+async function registrarPago(id) {
+    if (!(await confirmar('Confirmas que se recibió el pago de este pedido. Pasará a "Confirmado" y se otorgarán los puntos del cliente.', { okText: 'Sí, registrar pago' }))) return;
+    try {
+        const r = await api(`/admin/pedidos/${id}/registrar-pago`, { method: 'POST' });
+        toast(r.message || 'Pago registrado', 'ok');
+        await verDetalle(id);
+        cargarPedidos();
+    } catch (e) { toast(e.message, 'error'); }
+}
+
 document.getElementById('f-estado').addEventListener('change', cargarPedidos);
-cargarPedidos();
+cargarPedidos().then(() => {
+    const op = new URLSearchParams(location.search).get('open');
+    if (op) verDetalle(Number(op));
+});
 </script>
 </body>
 </html>

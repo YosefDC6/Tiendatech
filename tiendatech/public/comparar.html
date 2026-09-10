@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Comparar productos · TiendaTech</title>
+<link rel="stylesheet" href="/css/style.css" />
+</head>
+<body>
+<div id="navbar-placeholder"></div>
+
+<div class="container" style="padding-top:32px;padding-bottom:70px">
+    <div class="page-hero">
+        <div class="hero-badge" data-ic="grid" data-ic-size="26"></div>
+        <h1>Comparar productos</h1>
+        <p>Especificaciones lado a lado para decidir mejor.</p>
+    </div>
+    <div id="cmp"><div class="empty-state">Cargando…</div></div>
+</div>
+
+<div id="footer-placeholder"></div>
+<script src="/js/theme.js"></script>
+<script src="/js/api.js"></script>
+<script src="/js/icons.js"></script>
+<script src="/js/toast.js"></script>
+<script src="/js/layout.js"></script>
+<script src="/js/chatbot.js"></script>
+<script src="/js/comparar.js"></script>
+<script>
+const FILAS = [
+    { k: 'precio',          label: 'Precio',        fmt: (p) => formatoMoneda(p.precio), mejor: 'min' },
+    { k: 'marca',           label: 'Marca',         fmt: (p) => p.marca || '—' },
+    { k: 'categoria_nombre',label: 'Categoría',     fmt: (p) => p.categoria_nombre || '—' },
+    { k: 'procesador',      label: 'Procesador',    fmt: (p) => p.procesador || '—' },
+    { k: 'ram_gb',          label: 'RAM',           fmt: (p) => (p.ram_gb ? p.ram_gb + ' GB' : '—'), mejor: 'max', num: (p) => p.ram_gb },
+    { k: 'almacenamiento',  label: 'Almacenamiento',fmt: (p) => p.almacenamiento || '—' },
+    { k: 'tarjeta_grafica', label: 'Gráfica',       fmt: (p) => p.tarjeta_grafica || '—' },
+    { k: 'pantalla',        label: 'Pantalla',      fmt: (p) => p.pantalla || '—' },
+    { k: 'uso',             label: 'Usos',          fmt: (p) => (p.uso_recomendado || []).join(', ') || '—' },
+    { k: 'stock',           label: 'Disponibilidad',fmt: (p) => (p.stock > 0 ? 'En stock (' + p.stock + ')' : 'Sin stock'), mejor: 'max', num: (p) => p.stock },
+    { k: 'rating',          label: 'Calificación',  fmt: (p) => (p._rating ? p._rating.toFixed(1) + ' / 5 (' + p._nres + ')' : 'Sin reseñas'), mejor: 'max', num: (p) => p._rating || 0 },
+];
+
+const ids = (new URLSearchParams(location.search).get('ids') || '')
+    .split(',').map(Number).filter((n) => n > 0).slice(0, 4);
+
+(async () => {
+    const cont = document.getElementById('cmp');
+    if (ids.length < 2) {
+        cont.innerHTML = '<div class="empty-state">Elige al menos 2 productos desde el catálogo para compararlos.<br><a href="/index.html?ver=todo">Ir al catálogo</a></div>';
+        return;
+    }
+    let prods;
+    try { prods = await api('/productos?ids=' + ids.join(',')); }
+    catch (e) { cont.innerHTML = `<div class="empty-state">${e.message}</div>`; return; }
+    if (prods.length < 2) { cont.innerHTML = '<div class="empty-state">No se pudieron cargar los productos.</div>'; return; }
+
+    // reseñas (promedio) por producto, en paralelo
+    await Promise.all(prods.map(async (p) => {
+        try { const r = await api('/productos/' + p.id + '/resenas'); p._rating = Number(r.promedio) || 0; p._nres = r.total || 0; }
+        catch (e) { p._rating = 0; p._nres = 0; }
+    }));
+
+    const mejorEn = (fila) => {
+        if (!fila.mejor) return null;
+        const val = (p) => fila.num ? (Number(fila.num(p)) || 0) : Number(p[fila.k]) || 0;
+        const nums = prods.map(val);
+        const objetivo = fila.mejor === 'min' ? Math.min(...nums) : Math.max(...nums);
+        // solo resalta si hay diferencia real
+        if (nums.every((n) => n === nums[0])) return null;
+        return objetivo;
+    };
+
+    cont.innerHTML = `
+        <div class="cmp-wrap">
+            <table class="cmp-table">
+                <thead>
+                    <tr>
+                        <th></th>
+                        ${prods.map((p) => `
+                            <th>
+                                <img src="${p.imagen_url || '/img/producto.svg'}" referrerpolicy="no-referrer" onerror="this.onerror=null;this.src='/img/producto.svg'" alt="${p.nombre}" />
+                                <a href="/index.html#producto-${p.id}" class="cmp-nombre">${p.nombre}</a>
+                                <div class="cmp-th-acts">
+                                    <button class="btn btn-primary btn-sm" ${p.stock === 0 ? 'disabled' : ''} onclick="agregar(${p.id})">${p.stock === 0 ? 'Sin stock' : 'Agregar'}</button>
+                                    <button class="btn btn-ghost btn-sm" onclick="quitar(${p.id})">Quitar</button>
+                                </div>
+                            </th>`).join('')}
+                    </tr>
+                </thead>
+                <tbody>
+                    ${FILAS.map((fila) => {
+                        const obj = mejorEn(fila);
+                        return `<tr>
+                            <th>${fila.label}</th>
+                            ${prods.map((p) => {
+                                const txt = fila.fmt(p);
+                                const val = fila.num ? (Number(fila.num(p)) || 0) : Number(p[fila.k]) || 0;
+                                const win = obj !== null && val === obj;
+                                return `<td class="${win ? 'cmp-win' : ''}">${txt}${win ? ' ' + icon('check', 13) : ''}</td>`;
+                            }).join('')}
+                        </tr>`;
+                    }).join('')}
+                </tbody>
+            </table>
+        </div>
+        <p style="margin-top:14px"><a href="/index.html?ver=todo">← Seguir viendo el catálogo</a></p>
+    `;
+})();
+
+async function agregar(id) {
+    const cli = Sesion.cliente();
+    if (!cli) { irALogin('Inicia sesión para comprar'); return; }
+    try {
+        await api('/carrito', { method: 'POST', body: { cliente_id: cli.id, producto_id: id, cantidad: 1 } });
+        toast('Agregado al carrito', 'ok');
+        if (window.actualizarBadgeCarrito) actualizarBadgeCarrito();
+    } catch (e) { toast(e.message, 'error'); }
+}
+function quitar(id) {
+    Comparar.quitar(id);
+    const rest = Comparar.lista();
+    if (rest.length < 2) { location.href = '/index.html?ver=todo'; return; }
+    location.search = 'ids=' + rest.join(',');
+}
+</script>
+</body>
+</html>

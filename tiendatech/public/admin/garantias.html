@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Garantías · Admin TiendaTech</title>
+<link rel="stylesheet" href="/css/style.css" />
+</head>
+<body>
+<div class="admin-shell">
+    <aside class="admin-sidebar" id="admin-sidebar-placeholder"></aside>
+    <main class="admin-main">
+        <div id="topbar"></div>
+
+        <div class="card" style="max-width:760px;margin-bottom:18px">
+            <h3 style="margin-top:0">Validar garantía</h3>
+            <p style="color:var(--text-muted);font-size:.86rem;margin-top:0">Escribe el código que presenta el cliente para verificar cobertura.</p>
+            <div style="display:flex;gap:8px;flex-wrap:wrap">
+                <input id="v-cod" placeholder="AB3C-9KTP-2MQ7-XY4Z" style="flex:1;min-width:220px;text-transform:uppercase" onkeydown="if(event.key==='Enter')validar()" />
+                <button class="btn btn-primary" onclick="validar()">Validar</button>
+            </div>
+            <div id="v-res" style="margin-top:14px"></div>
+        </div>
+
+        <div class="stat-grid" id="stat" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr))"></div>
+
+        <div class="filters-bar">
+            <input type="text" id="f-busqueda" placeholder="Folio, código, cliente, producto, pedido…" />
+            <select id="f-estado">
+                <option>Todas</option>
+                <option value="activa">Activa</option><option value="usada">Usada</option>
+                <option value="vencida">Vencida</option><option value="cancelada">Cancelada</option>
+            </select>
+        </div>
+        <div class="table-wrap">
+            <table>
+                <thead><tr><th>Folio</th><th>Cliente</th><th>Producto</th><th>Plan</th><th>Vigencia</th><th>Estado</th><th></th></tr></thead>
+                <tbody id="tabla"><tr><td colspan="7">Cargando…</td></tr></tbody>
+            </table>
+        </div>
+    </main>
+</div>
+
+<div class="modal-overlay" id="modal"><div class="modal" id="modal-body"></div></div>
+
+<script src="/js/theme.js"></script>
+<script src="/js/api.js"></script>
+<script src="/js/icons.js"></script>
+<script src="/js/toast.js"></script>
+<script src="/admin/js/admin-layout.js"></script>
+<script>
+requireAuthAdmin();
+renderAdminSidebar('garantias');
+document.getElementById('topbar').innerHTML = adminHeader('Garantías extendidas', 'Certificados vendidos con los pedidos: validación y reclamos.');
+
+const EST_LABEL = { activa: 'Activa', usada: 'Usada', vencida: 'Vencida', cancelada: 'Cancelada' };
+let GARANTIAS = [];
+
+async function cargar() {
+    const q = new URLSearchParams();
+    const b = document.getElementById('f-busqueda').value.trim();
+    const e = document.getElementById('f-estado').value;
+    if (b) q.set('busqueda', b);
+    if (e && e !== 'Todas') q.set('estado', e);
+    const d = await api('/admin/garantias?' + q.toString());
+    GARANTIAS = d.garantias;
+
+    document.getElementById('stat').innerHTML = `
+        <div class="stat-card"><div class="stat-label">Activas</div><div class="stat-value" style="color:var(--success)">${d.conteos.activas}</div></div>
+        <div class="stat-card"><div class="stat-label">Con reclamo</div><div class="stat-value" style="color:var(--warning)">${d.conteos.con_reclamo}</div></div>
+        <div class="stat-card"><div class="stat-label">Usadas</div><div class="stat-value">${d.conteos.usadas}</div></div>
+        <div class="stat-card"><div class="stat-label">Vencidas / canceladas</div><div class="stat-value">${d.conteos.inactivas}</div></div>
+    `;
+
+    document.getElementById('tabla').innerHTML = d.garantias.length === 0
+        ? '<tr><td colspan="7">Sin resultados.</td></tr>'
+        : d.garantias.map((g) => `
+            <tr onclick="abrir(${g.id})" style="cursor:pointer">
+                <td class="mono">${g.folio}${g.reclamo_fecha && g.estado === 'activa' ? ` <span class="tag" style="color:var(--warning);border-color:currentColor">reclamo</span>` : ''}</td>
+                <td>${g.cliente_nombre || '—'}<div style="font-size:.76rem;color:var(--text-muted)">${g.cliente_correo || ''}</div></td>
+                <td>${g.producto || '—'}</td>
+                <td>${g.plan}</td>
+                <td>${formatoFecha(g.inicio)} → ${formatoFecha(g.vence)}</td>
+                <td><span class="estado-pill gar-est-${g.estado}">${EST_LABEL[g.estado]}${(g.estado === 'activa' && g.vencida) ? ' (venc.)' : ''}</span></td>
+                <td><button class="btn btn-outline btn-sm" onclick="event.stopPropagation();abrir(${g.id})">Gestionar</button></td>
+            </tr>`).join('');
+}
+
+function tarjetaValidacion(g) {
+    const ok = g.valida !== undefined ? g.valida : (g.estado === 'activa' && !g.vencida);
+    return `
+        <div class="gar-valida ${ok ? 'ok' : 'no'}">
+            <div class="gv-head">${icon(ok ? 'check' : 'alert', 18)} ${ok ? 'Garantía válida' : 'Garantía no vigente'}</div>
+            <div class="gar-grid">
+                <div><span>Folio</span><strong class="mono">${g.folio}</strong></div>
+                <div><span>Estado</span><strong>${EST_LABEL[g.estado]}${g.vencida ? ' (vencida)' : ''}</strong></div>
+                <div><span>Producto</span><strong>${g.producto || '—'}</strong></div>
+                <div><span>Cliente</span><strong>${g.cliente_nombre || '—'}</strong></div>
+                <div><span>Vigencia</span><strong>${formatoFecha(g.inicio)} → ${formatoFecha(g.vence)}</strong></div>
+                <div><span>Días restantes</span><strong>${g.dias_restantes > 0 ? g.dias_restantes : 0}</strong></div>
+                <div><span>Pedido</span><strong class="mono">${g.numero_orden || '—'}</strong></div>
+                <div><span>Cobertura</span><strong>${g.meses} meses</strong></div>
+            </div>
+            ${g.reclamo_fecha ? `<div class="gar-reclamo">${icon('clock', 13)} Reclamo del ${formatoFecha(g.reclamo_fecha)}: ${g.reclamo_desc || ''}</div>` : ''}
+            <div class="gar-acts" style="margin-top:10px">
+                ${g.estado === 'activa' ? `
+                    <button class="btn btn-primary btn-sm" onclick="resolver(${g.id}, 'usada')">Marcar como usada</button>
+                    ${g.reclamo_fecha ? `<button class="btn btn-ghost btn-sm" onclick="resolver(${g.id}, 'activa')">Cerrar reclamo (sin usar)</button>` : ''}
+                    ${g.vencida ? `<button class="btn btn-ghost btn-sm" onclick="resolver(${g.id}, 'vencida')">Marcar vencida</button>` : ''}
+                ` : `<span style="color:var(--text-muted);font-size:.85rem">Sin acciones disponibles.</span>`}
+            </div>
+        </div>`;
+}
+
+async function validar() {
+    const cod = document.getElementById('v-cod').value.trim();
+    const box = document.getElementById('v-res');
+    if (!cod) { box.innerHTML = ''; return; }
+    box.innerHTML = '<span style="color:var(--text-muted)">Buscando…</span>';
+    try {
+        const g = await api('/admin/garantias/validar/' + encodeURIComponent(cod));
+        box.innerHTML = tarjetaValidacion(g);
+    } catch (e) {
+        box.innerHTML = `<div class="gar-valida no"><div class="gv-head">${icon('x', 18)} ${e.message}</div></div>`;
+    }
+}
+
+function abrir(id) {
+    const g = GARANTIAS.find((x) => x.id === id);
+    if (!g) return;
+    document.getElementById('modal-body').innerHTML = `
+        <button class="modal-close" onclick="document.getElementById('modal').classList.remove('open')">${icon('x', 20)}</button>
+        <h3 style="margin-bottom:2px">${g.folio}</h3>
+        <p style="margin:0 0 12px;color:var(--text-muted);font-size:.84rem">Código <span class="mono">${g.codigo}</span></p>
+        ${tarjetaValidacion(g)}
+        ${g.resuelto_nota ? `<p style="font-size:.83rem;margin-top:10px"><strong>Nota de resolución:</strong> ${g.resuelto_nota}${g.resuelto_por_nombre ? ' — ' + g.resuelto_por_nombre : ''}</p>` : ''}
+    `;
+    document.getElementById('modal').classList.add('open');
+}
+
+async function resolver(id, estado) {
+    let nota = '';
+    if (estado === 'usada') {
+        nota = await pedirDato('Nota de la resolución (qué se hizo con la garantía):', { placeholder: 'Reemplazo de equipo / reparación en centro de servicio…' });
+        if (nota === null) return;
+    }
+    try {
+        await api(`/admin/garantias/${id}`, { method: 'PUT', body: { estado, nota } });
+        toast('Garantía actualizada', 'ok');
+        document.getElementById('modal').classList.remove('open');
+        const cod = document.getElementById('v-cod').value.trim();
+        if (cod) validar();
+        cargar();
+    } catch (e) { toast(e.message, 'error'); }
+}
+
+document.getElementById('f-estado').addEventListener('change', cargar);
+document.getElementById('f-busqueda').addEventListener('keydown', (e) => { if (e.key === 'Enter') cargar(); });
+cargar();
+</script>
+</body>
+</html>

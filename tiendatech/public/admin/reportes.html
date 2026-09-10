@@ -7,7 +7,7 @@
 <link rel="stylesheet" href="/css/style.css" />
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
 </head>
-<body class="theme-light">
+<body>
 <div class="admin-shell">
     <aside class="admin-sidebar" id="admin-sidebar-placeholder"></aside>
     <main class="admin-main">
@@ -34,8 +34,26 @@
 <script>
 requireAuthAdmin();
 renderAdminSidebar('reportes');
-document.getElementById('topbar').innerHTML = adminHeader('Reportes y métricas', 'Indicadores para evaluar el desempeño del CRM.');
-let chartTipo, chartEtapa;
+document.getElementById('topbar').innerHTML = adminHeader('Reportes y métricas', 'Indicadores para evaluar el desempeño del CRM.',
+    '<button class="btn btn-outline" onclick="exportar()">Exportar CSV</button>');
+let chartTipo, chartEtapa, REPORTE = null;
+
+function exportar() {
+    if (!REPORTE) return;
+    const r = REPORTE;
+    const filas = [
+        { indicador: 'Clientes totales', valor: r.clientes.total },
+        { indicador: 'Clientes activos', valor: r.clientes.activos },
+        { indicador: 'Interacciones (periodo)', valor: r.interacciones.total_periodo },
+        { indicador: 'Clientes sin interacción 30+ días', valor: r.clientes.sin_interaccion },
+        { indicador: 'Nuevos clientes (periodo)', valor: r.clientes.nuevos_periodo },
+        { indicador: 'Ventas (periodo)', valor: r.ventas.ingresos },
+        { indicador: 'Pedidos (periodo)', valor: r.ventas.pedidos },
+        ...r.interacciones.por_tipo.map((x) => ({ indicador: 'Interacciones · ' + x.tipo, valor: x.total })),
+        ...r.clientes_por_etapa.map((x) => ({ indicador: 'Clientes · etapa ' + x.etapa_crm, valor: x.total })),
+    ];
+    descargarCSV('reporte-crm', filas);
+}
 
 function limpiar() { document.getElementById('f-desde').value = ''; document.getElementById('f-hasta').value = ''; cargar(); }
 
@@ -45,6 +63,7 @@ async function cargar() {
     const q = new URLSearchParams();
     if (d) q.set('desde', d); if (h) q.set('hasta', h);
     const r = await api('/admin/reportes?' + q.toString());
+    REPORTE = r;
 
     document.getElementById('stat').innerHTML = `
         <div class="stat-card"><div class="stat-label">Clientes totales</div><div class="stat-value">${r.clientes.total}</div></div>

@@ -52,6 +52,7 @@ async function renderNavbar() {
                 ${M('heart', 'Favoritos', '/favoritos.html')}
                 ${M('pin', 'Direcciones', '/direcciones.html')}
                 ${M('card', 'Métodos de pago', '/pagos.html')}
+                ${M('shield', 'Mis garantías', '/garantias.html')}
                 ${M('help', 'Soporte', '/soporte.html')}
                 ${M('settings', 'Preferencias', '/preferencias.html')}
                 <div class="menu-sep"></div>
@@ -118,6 +119,7 @@ async function renderNavbar() {
                     <a href="/recompensas.html">Club de puntos</a>
                     <a href="/favoritos.html">Favoritos</a>
                     <a href="/resenas.html">Mis reseñas</a>
+                    <a href="/garantias.html">Mis garantías</a>
                     <a href="/direcciones.html">Direcciones</a>
                     <a href="/pagos.html">Métodos de pago</a>
                     <a href="/soporte.html">Soporte</a>

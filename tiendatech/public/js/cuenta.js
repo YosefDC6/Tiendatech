@@ -8,6 +8,7 @@ const CUENTA_LINKS = [
     { href: '/recompensas.html', key: 'recompensas', label: 'Club de puntos', ic: 'star' },
     { href: '/favoritos.html', key: 'favoritos', label: 'Favoritos', ic: 'heart' },
     { href: '/resenas.html', key: 'resenas', label: 'Mis reseñas', ic: 'chat' },
+    { href: '/garantias.html', key: 'garantias', label: 'Mis garantías', ic: 'shield' },
     { href: '/direcciones.html', key: 'direcciones', label: 'Direcciones', ic: 'pin' },
     { href: '/pagos.html', key: 'pagos', label: 'Métodos de pago', ic: 'card' },
     { href: '/soporte.html', key: 'soporte', label: 'Soporte', ic: 'help' },

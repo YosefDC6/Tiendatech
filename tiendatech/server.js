@@ -262,6 +262,19 @@ app.get('/api/categorias', asyncRoute(async (req, res) => {
 
 // Catálogo con filtros: categoria, uso, precio_min, precio_max, busqueda
 app.get('/api/productos', asyncRoute(async (req, res) => {
+    // Atajo para el comparador: ?ids=1,2,3 (máximo 4)
+    if (req.query.ids) {
+        const ids = String(req.query.ids).split(',').map(Number).filter((n) => n > 0).slice(0, 4);
+        if (ids.length === 0) return res.json([]);
+        const r = await pool.query(
+            `SELECT p.*, c.nombre AS categoria_nombre FROM productos p
+             LEFT JOIN categorias c ON p.categoria_id = c.id WHERE p.id = ANY($1)`,
+            [ids]
+        );
+        // respeta el orden pedido
+        return res.json(ids.map((id) => r.rows.find((x) => x.id === id)).filter(Boolean));
+    }
+
     const { categoria, uso, precio_min, precio_max, busqueda, marca } = req.query;
     const cond = ['p.activo = true'];
     const values = [];
@@ -291,7 +304,14 @@ app.get('/api/productos/:id', asyncRoute(async (req, res) => {
         [req.params.id]
     );
     if (result.rows.length === 0) return res.status(404).json({ message: 'Producto no encontrado' });
-    res.json(result.rows[0]);
+    res.json({ ...result.rows[0], garantias: planesParaProducto(result.rows[0].precio) });
+}));
+
+// Planes de garantía para un producto (los usa el modal del catálogo)
+app.get('/api/productos/:id/garantias', asyncRoute(async (req, res) => {
+    const r = await pool.query('SELECT precio FROM productos WHERE id = $1', [req.params.id]);
+    if (r.rows.length === 0) return res.status(404).json({ message: 'Producto no encontrado' });
+    res.json(planesParaProducto(r.rows[0].precio));
 }));
 
 // Reseñas públicas de un producto (promedio + lista)
@@ -390,7 +410,8 @@ app.use('/api/carrito', requireCliente);
 app.get('/api/carrito/:clienteId', asyncRoute(async (req, res) => {
     const clienteId = req.cliente.id; // el de la sesión, no el de la URL
     const result = await pool.query(
-        `SELECT ci.id, ci.cantidad, p.id AS producto_id, p.nombre, p.precio, p.imagen_url, p.stock
+        `SELECT ci.id, ci.cantidad, ci.garantia_clave, ci.garantia_plan, ci.garantia_meses, ci.garantia_costo,
+                p.id AS producto_id, p.nombre, p.precio, p.imagen_url, p.stock
          FROM carrito_items ci JOIN productos p ON ci.producto_id = p.id
          WHERE ci.cliente_id = $1 ORDER BY ci.fecha_agregado DESC`,
         [clienteId]
@@ -401,26 +422,55 @@ app.get('/api/carrito/:clienteId', asyncRoute(async (req, res) => {
 app.post('/api/carrito', asyncRoute(async (req, res) => {
     const cliente_id = req.cliente.id;
     const { producto_id, cantidad = 1 } = req.body;
+    const gClave = planGarantia(req.body.garantia).clave;
+
+    const prod = await pool.query('SELECT precio FROM productos WHERE id = $1', [producto_id]);
+    if (prod.rows.length === 0) return res.status(404).json({ message: 'Producto no encontrado' });
+    const precio = prod.rows[0].precio;
+    const gPlan = planGarantia(gClave);
+
     const existente = await pool.query(
-        'SELECT id, cantidad FROM carrito_items WHERE cliente_id = $1 AND producto_id = $2',
+        'SELECT id, cantidad, garantia_clave FROM carrito_items WHERE cliente_id = $1 AND producto_id = $2',
         [cliente_id, producto_id]
     );
     if (existente.rows.length > 0) {
-        const nuevaCantidad = existente.rows[0].cantidad + cantidad;
-        await pool.query('UPDATE carrito_items SET cantidad = $1 WHERE id = $2', [nuevaCantidad, existente.rows[0].id]);
+        const row = existente.rows[0];
+        const nuevaCantidad = row.cantidad + cantidad;
+        // si se pidió una garantía explícita se toma esa; si no, se conserva la que ya tenía
+        const claveFinal = (gClave !== 'none') ? gClave : row.garantia_clave;
+        const pf = planGarantia(claveFinal);
+        await pool.query(
+            `UPDATE carrito_items SET cantidad = $1, garantia_clave = $2, garantia_plan = $3,
+                 garantia_meses = $4, garantia_costo = $5 WHERE id = $6`,
+            [nuevaCantidad, claveFinal, pf.meses ? pf.label : null, pf.meses, costoGarantia(precio, claveFinal) * nuevaCantidad, row.id]
+        );
     } else {
-        await pool.query('INSERT INTO carrito_items (cliente_id, producto_id, cantidad) VALUES ($1,$2,$3)', [cliente_id, producto_id, cantidad]);
+        await pool.query(
+            `INSERT INTO carrito_items (cliente_id, producto_id, cantidad, garantia_clave, garantia_plan, garantia_meses, garantia_costo)
+             VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+            [cliente_id, producto_id, cantidad, gClave, gPlan.meses ? gPlan.label : null, gPlan.meses, costoGarantia(precio, gClave) * cantidad]
+        );
     }
     res.status(201).json({ message: 'Agregado al carrito' });
 }));
 
 app.put('/api/carrito/:id', asyncRoute(async (req, res) => {
-    const { cantidad } = req.body;
-    const r = await pool.query(
-        'UPDATE carrito_items SET cantidad = $1 WHERE id = $2 AND cliente_id = $3 RETURNING id',
-        [cantidad, req.params.id, req.cliente.id]
+    const cur = await pool.query(
+        `SELECT ci.id, ci.cantidad, ci.garantia_clave, p.precio
+         FROM carrito_items ci JOIN productos p ON p.id = ci.producto_id
+         WHERE ci.id = $1 AND ci.cliente_id = $2`,
+        [req.params.id, req.cliente.id]
     );
-    if (r.rows.length === 0) return res.status(404).json({ message: 'Ítem no encontrado en tu carrito' });
+    if (cur.rows.length === 0) return res.status(404).json({ message: 'Ítem no encontrado en tu carrito' });
+    const row = cur.rows[0];
+    const cantidad = req.body.cantidad !== undefined ? Math.max(1, Number(req.body.cantidad)) : row.cantidad;
+    const gClave = req.body.garantia !== undefined ? planGarantia(req.body.garantia).clave : row.garantia_clave;
+    const pf = planGarantia(gClave);
+    await pool.query(
+        `UPDATE carrito_items SET cantidad = $1, garantia_clave = $2, garantia_plan = $3,
+             garantia_meses = $4, garantia_costo = $5 WHERE id = $6`,
+        [cantidad, gClave, pf.meses ? pf.label : null, pf.meses, costoGarantia(row.precio, gClave) * cantidad, req.params.id]
+    );
     res.json({ message: 'Carrito actualizado' });
 }));
 
@@ -438,9 +488,78 @@ app.delete('/api/carrito/:id', asyncRoute(async (req, res) => {
 // PEDIDOS (checkout + seguimiento)
 // =========================================================
 
+// Aplica el "cobro" de un pedido al Club: otorga puntos ganados, actualiza
+// las métricas del cliente y su etapa CRM. Se usa al pagar con tarjeta (al
+// instante) o al registrar el pago de un pedido SPEI / en tienda.
+async function aplicarCobroPedido(client, pedido) {
+    const cliente_id = pedido.cliente_id;
+    const subtotal = Number(pedido.subtotal);
+    const total = Number(pedido.total);
+    const m = await client.query(
+        'SELECT COALESCE(valor_total_compras,0) AS gasto, COALESCE(total_compras,0) AS compras FROM metricas_clientes WHERE cliente_id = $1',
+        [cliente_id]
+    );
+    const { actual: nivel } = nivelRecompensas(m.rows[0]?.gasto || 0, m.rows[0]?.compras || 0);
+    const puntos_ganados = Math.floor((subtotal / 20) * nivel.multiplicador);
+    if (puntos_ganados > 0) {
+        await client.query('UPDATE clientes SET puntos = puntos + $1 WHERE id = $2', [puntos_ganados, cliente_id]);
+        await client.query(
+            `INSERT INTO movimientos_puntos (cliente_id, tipo, puntos, motivo, pedido_id) VALUES ($1,'ganado',$2,$3,$4)`,
+            [cliente_id, puntos_ganados, `Compra ${pedido.numero_orden} (nivel ${nivel.nombre})`, pedido.id]
+        );
+    }
+    await client.query(
+        `INSERT INTO metricas_clientes (cliente_id, total_compras, valor_total_compras, ticket_promedio)
+         VALUES ($1, 1, $2, $2)
+         ON CONFLICT (cliente_id) DO UPDATE SET
+             total_compras       = metricas_clientes.total_compras + 1,
+             valor_total_compras = metricas_clientes.valor_total_compras + $2,
+             ticket_promedio     = (metricas_clientes.valor_total_compras + $2) / (metricas_clientes.total_compras + 1)`,
+        [cliente_id, total]
+    );
+    await client.query(
+        `UPDATE clientes SET etapa_crm = CASE WHEN etapa_crm = 'Prospecto' THEN 'Activo' ELSE etapa_crm END WHERE id = $1`,
+        [cliente_id]
+    );
+    return puntos_ganados;
+}
+
+function generarReferenciaPago(tipo) {
+    const n = String(Math.floor(Math.random() * 1e10)).padStart(10, '0');
+    return (tipo === 'spei' ? 'SPEI-' : 'TIENDA-') + n;
+}
+
+// =========================================================
+// GARANTÍAS EXTENDIDAS
+//   El costo es un % del precio del producto. Debe estar en
+//   sincronía con public/js/garantia.js (solo para mostrar).
+// =========================================================
+const PLANES_GARANTIA = [
+    { clave: 'none', label: 'Sin garantía extendida', meses: 0,  factor: 0 },
+    { clave: 'b12',  label: 'Básica · 12 meses',      meses: 12, factor: 0.06 },
+    { clave: 'e24',  label: 'Extendida · 24 meses',   meses: 24, factor: 0.12 },
+    { clave: 't36',  label: 'Total · 36 meses',       meses: 36, factor: 0.18 },
+];
+function planGarantia(clave) {
+    return PLANES_GARANTIA.find((p) => p.clave === clave) || PLANES_GARANTIA[0];
+}
+function costoGarantia(precio, clave) {
+    return Math.round(Number(precio || 0) * planGarantia(clave).factor);
+}
+function planesParaProducto(precio) {
+    return PLANES_GARANTIA.map((p) => ({ ...p, costo: Math.round(Number(precio || 0) * p.factor) }));
+}
+function codigoGarantia() {
+    const abc = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    let s = '';
+    for (let i = 0; i < 16; i++) { if (i && i % 4 === 0) s += '-'; s += abc[Math.floor(Math.random() * abc.length)]; }
+    return s; // p.ej. AB3C-9KTP-2MQ7-XY4Z
+}
+
 app.post('/api/pedidos', requireCliente, asyncRoute(async (req, res) => {
     const cliente_id = req.cliente.id;
     const { items, metodo_pago, direccion_envio, notas } = req.body;
+    const metodo_tipo = ['tarjeta', 'spei', 'tienda'].includes(req.body.metodo_tipo) ? req.body.metodo_tipo : 'tarjeta';
     let puntos_canjear = Math.max(0, Math.floor(Number(req.body.puntos_canjear) || 0));
     if (!items || items.length === 0) {
         return res.status(400).json({ message: 'El carrito no tiene productos' });
@@ -450,6 +569,7 @@ app.post('/api/pedidos', requireCliente, asyncRoute(async (req, res) => {
     try {
         await client.query('BEGIN');
         let subtotal = 0;
+        let garantiasTotal = 0;
         const detalles = [];
 
         for (const item of items) {
@@ -460,7 +580,15 @@ app.post('/api/pedidos', requireCliente, asyncRoute(async (req, res) => {
 
             const lineaSubtotal = p.precio * item.cantidad;
             subtotal += Number(lineaSubtotal);
-            detalles.push({ producto_id: item.producto_id, cantidad: item.cantidad, precio_unitario: p.precio, subtotal: lineaSubtotal });
+
+            const gp = planGarantia(item.garantia);
+            const gCosto = costoGarantia(p.precio, gp.clave) * item.cantidad;
+            garantiasTotal += gCosto;
+
+            detalles.push({
+                producto_id: item.producto_id, cantidad: item.cantidad, precio_unitario: p.precio, subtotal: lineaSubtotal,
+                garantia_clave: gp.clave, garantia_plan: gp.meses ? gp.label : null, garantia_meses: gp.meses, garantia_costo: gCosto,
+            });
 
             await client.query('UPDATE productos SET stock = stock - $1 WHERE id = $2', [item.cantidad, item.producto_id]);
             await client.query(
@@ -469,6 +597,7 @@ app.post('/api/pedidos', requireCliente, asyncRoute(async (req, res) => {
             );
         }
 
+        subtotal += garantiasTotal;
         const impuestos = Math.round(subtotal * 0.16 * 100) / 100;
         const envio = subtotal >= 10000 ? 0 : 199;
 
@@ -486,28 +615,45 @@ app.post('/api/pedidos', requireCliente, asyncRoute(async (req, res) => {
         const total = Math.round((subtotal + impuestos + envio - descuento) * 100) / 100;
         const numero_orden = 'ORD-' + Date.now();
 
+        // Tarjeta = se paga al instante. SPEI / tienda = pago pendiente + código.
+        const inmediato = metodo_tipo === 'tarjeta';
+        const pago_estado = inmediato ? 'pagado' : 'pendiente';
+        const estado = inmediato ? 'confirmado' : 'pendiente';
+        const pago_referencia = inmediato ? null : generarReferenciaPago(metodo_tipo);
+        const pago_vence = inmediato ? null : new Date(Date.now() + (metodo_tipo === 'spei' ? 3 : 5) * 86400000);
+
         const pedido = await client.query(
-            `INSERT INTO pedidos (numero_orden, cliente_id, subtotal, impuestos, envio, descuento, total, estado, metodo_pago, direccion_envio, notas)
-             VALUES ($1,$2,$3,$4,$5,$6,$7,'confirmado',$8,$9,$10) RETURNING *`,
-            [numero_orden, cliente_id, subtotal, impuestos, envio, descuento, total, metodo_pago, direccion_envio, notas]
+            `INSERT INTO pedidos (numero_orden, cliente_id, subtotal, impuestos, envio, descuento, total, estado,
+                                  metodo_pago, pago_estado, pago_referencia, pago_vence, direccion_envio, notas, fecha_confirmacion)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) RETURNING *`,
+            [numero_orden, cliente_id, subtotal, impuestos, envio, descuento, total, estado,
+                metodo_pago, pago_estado, pago_referencia, pago_vence, direccion_envio, notas,
+                inmediato ? new Date() : null]
         );
         const pedidoId = pedido.rows[0].id;
 
         for (const d of detalles) {
-            await client.query(
-                `INSERT INTO pedido_items (pedido_id, producto_id, cantidad, precio_unitario, subtotal) VALUES ($1,$2,$3,$4,$5)`,
-                [pedidoId, d.producto_id, d.cantidad, d.precio_unitario, d.subtotal]
+            const it = await client.query(
+                `INSERT INTO pedido_items (pedido_id, producto_id, cantidad, precio_unitario, subtotal, garantia_plan, garantia_meses, garantia_costo)
+                 VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id`,
+                [pedidoId, d.producto_id, d.cantidad, d.precio_unitario, d.subtotal, d.garantia_plan, d.garantia_meses, d.garantia_costo]
             );
+            if (d.garantia_meses > 0) {
+                const vence = new Date();
+                vence.setMonth(vence.getMonth() + d.garantia_meses);
+                const g = await client.query(
+                    `INSERT INTO garantias (folio, codigo, pedido_id, pedido_item_id, cliente_id, producto_id, plan, meses, costo, inicio, vence)
+                     VALUES ('GAR-TMP', $1, $2, $3, $4, $5, $6, $7, $8, CURRENT_DATE, $9)
+                     RETURNING id`,
+                    [codigoGarantia(), pedidoId, it.rows[0].id, cliente_id, d.producto_id, d.garantia_plan, d.garantia_meses, d.garantia_costo, vence.toISOString().slice(0, 10)]
+                );
+                await client.query(`UPDATE garantias SET folio = 'GAR-' || (100000 + id) WHERE id = $1`, [g.rows[0].id]);
+            }
         }
 
-        // ---- Club: aplicar canje y otorgar puntos por la compra ----
-        const m = await client.query(
-            'SELECT COALESCE(valor_total_compras,0) AS gasto, COALESCE(total_compras,0) AS compras FROM metricas_clientes WHERE cliente_id = $1',
-            [cliente_id]
-        );
-        const { actual: nivel } = nivelRecompensas(m.rows[0]?.gasto || 0, m.rows[0]?.compras || 0);
-        const puntos_ganados = Math.floor((subtotal / 20) * nivel.multiplicador);
-
+        // El canje de puntos siempre se retiene al crear el pedido (si se
+        // cancela, se devuelve). Los puntos GANADOS y las métricas solo se
+        // aplican cuando el pago está confirmado.
         if (puntos_canjear > 0) {
             await client.query('UPDATE clientes SET puntos = puntos - $1 WHERE id = $2', [puntos_canjear, cliente_id]);
             await client.query(
@@ -515,39 +661,19 @@ app.post('/api/pedidos', requireCliente, asyncRoute(async (req, res) => {
                 [cliente_id, -puntos_canjear, `Descuento en ${numero_orden}`, pedidoId]
             );
         }
-        if (puntos_ganados > 0) {
-            await client.query('UPDATE clientes SET puntos = puntos + $1 WHERE id = $2', [puntos_ganados, cliente_id]);
-            await client.query(
-                `INSERT INTO movimientos_puntos (cliente_id, tipo, puntos, motivo, pedido_id) VALUES ($1,'ganado',$2,$3,$4)`,
-                [cliente_id, puntos_ganados, `Compra ${numero_orden} (nivel ${nivel.nombre})`, pedidoId]
-            );
-        }
 
-        // ---- Métricas del cliente: el pedido nace 'confirmado' vía INSERT,
-        //      así que el trigger AFTER UPDATE no corre. Se actualiza aquí
-        //      para que suba el nivel del Club, el total gastado y el conteo
-        //      de compras. (Se cuenta por 'total', igual que el trigger.)
-        await client.query(
-            `INSERT INTO metricas_clientes (cliente_id, total_compras, valor_total_compras, ticket_promedio)
-             VALUES ($1, 1, $2, $2)
-             ON CONFLICT (cliente_id) DO UPDATE SET
-                 total_compras       = metricas_clientes.total_compras + 1,
-                 valor_total_compras = metricas_clientes.valor_total_compras + $2,
-                 ticket_promedio     = (metricas_clientes.valor_total_compras + $2)
-                                       / (metricas_clientes.total_compras + 1)`,
-            [cliente_id, total]
-        );
+        let puntos_ganados = 0;
+        if (inmediato) {
+            puntos_ganados = await aplicarCobroPedido(client, pedido.rows[0]);
+        }
 
         await client.query('DELETE FROM carrito_items WHERE cliente_id = $1', [cliente_id]);
         await client.query('COMMIT');
 
-        // Etapa CRM: si es su primera compra pasa a Activo
-        await pool.query(
-            `UPDATE clientes SET etapa_crm = CASE WHEN etapa_crm = 'Prospecto' THEN 'Activo' ELSE etapa_crm END WHERE id = $1`,
-            [cliente_id]
-        );
-
-        res.status(201).json({ ...pedido.rows[0], puntos_ganados, puntos_canjeados: puntos_canjear });
+        res.status(201).json({
+            ...pedido.rows[0], puntos_ganados, puntos_canjeados: puntos_canjear,
+            metodo_tipo, garantias_total: garantiasTotal,
+        });
     } catch (error) {
         await client.query('ROLLBACK');
         res.status(400).json({ message: error.message });
@@ -574,7 +700,76 @@ app.get('/api/pedidos/:id/detalle', asyncRoute(async (req, res) => {
         `SELECT pi.*, p.nombre, p.imagen_url FROM pedido_items pi JOIN productos p ON pi.producto_id = p.id WHERE pi.pedido_id = $1`,
         [req.params.id]
     );
-    res.json({ ...pedido.rows[0], items: items.rows });
+    const garantias = await pool.query(
+        `SELECT g.folio, g.codigo, g.plan, g.meses, g.costo, g.inicio, g.vence, g.estado, pr.nombre AS producto
+         FROM garantias g LEFT JOIN productos pr ON pr.id = g.producto_id
+         WHERE g.pedido_id = $1 ORDER BY g.id`,
+        [req.params.id]
+    );
+    res.json({ ...pedido.rows[0], items: items.rows, garantias: garantias.rows });
+}));
+
+// Recibo / comprobante de un pedido. Lo puede ver el cliente dueño o
+// cualquier usuario interno (admin / vendedor / soporte / almacén).
+app.get('/api/pedidos/:id/recibo', asyncRoute(async (req, res) => {
+    const header = req.headers.authorization || '';
+    const token = header.startsWith('Bearer ') ? header.slice(7) : null;
+    let quien = null;
+    try {
+        const [tipo, tid] = Buffer.from(token || '', 'base64').toString('utf8').split(':');
+        if (tipo === 'cliente' && tid) quien = { tipo: 'cliente', id: Number(tid) };
+        else if (tipo === 'usuario' && tid) {
+            const u = await pool.query('SELECT id, activo FROM usuarios WHERE id = $1', [tid]);
+            if (u.rows[0] && u.rows[0].activo) quien = { tipo: 'usuario', id: Number(tid) };
+        }
+    } catch (e) { /* token inválido */ }
+    if (!quien) return res.status(401).json({ message: 'Inicia sesión para ver el comprobante' });
+
+    const pr = await pool.query(
+        `SELECT p.*, c.nombre AS cliente_nombre, c.correo AS cliente_correo
+         FROM pedidos p JOIN clientes c ON c.id = p.cliente_id WHERE p.id = $1`,
+        [req.params.id]
+    );
+    if (pr.rows.length === 0) return res.status(404).json({ message: 'Pedido no encontrado' });
+    const pedido = pr.rows[0];
+    if (quien.tipo === 'cliente' && quien.id !== Number(pedido.cliente_id)) {
+        return res.status(403).json({ message: 'Este comprobante no es de tu cuenta' });
+    }
+
+    const items = await pool.query(
+        `SELECT pi.cantidad, pi.precio_unitario, pi.subtotal, pi.garantia_plan, pi.garantia_meses, pi.garantia_costo, p.nombre
+         FROM pedido_items pi JOIN productos p ON p.id = pi.producto_id
+         WHERE pi.pedido_id = $1 ORDER BY pi.id`,
+        [req.params.id]
+    );
+    const garantias = await pool.query(
+        `SELECT g.folio, g.codigo, g.plan, g.meses, g.costo, g.inicio, g.vence, g.estado, pr.nombre AS producto
+         FROM garantias g LEFT JOIN productos pr ON pr.id = g.producto_id
+         WHERE g.pedido_id = $1 ORDER BY g.id`,
+        [req.params.id]
+    );
+    const pts = await pool.query(
+        `SELECT tipo, puntos, motivo FROM movimientos_puntos WHERE pedido_id = $1 ORDER BY id`,
+        [req.params.id]
+    );
+    const ganados = pts.rows.filter((r) => r.tipo === 'ganado').reduce((a, r) => a + r.puntos, 0);
+    const canjeados = -pts.rows.filter((r) => r.tipo === 'canjeado').reduce((a, r) => a + r.puntos, 0);
+
+    res.json({
+        ...pedido,
+        items: items.rows,
+        garantias: garantias.rows,
+        puntos_ganados: ganados,
+        puntos_canjeados: canjeados,
+        emisor: {
+            nombre: 'TiendaTech S.A. de C.V.',
+            rfc: 'TTE250101XY9',
+            domicilio: 'Av. Tecnológico 1200, Col. Centro, Aguascalientes, Ags.',
+            banco: 'STP',
+            clabe: '646180' + String(1000000000 + Number(pedido.id) * 131).slice(0, 12),
+            beneficiario: 'TiendaTech S.A. de C.V.',
+        },
+    });
 }));
 
 // =========================================================
@@ -845,6 +1040,52 @@ app.delete('/api/clientes/:id/direcciones/:dirId', asyncRoute(async (req, res) =
     res.json({ message: 'Dirección eliminada' });
 }));
 
+// El cliente avisa que ya realizó el pago de un pedido SPEI / en tienda.
+// Solo deja una marca para que el equipo lo verifique; no confirma el pago.
+app.post('/api/clientes/:id/pedidos/:pedidoId/reportar-pago', asyncRoute(async (req, res) => {
+    const r = await pool.query(
+        `UPDATE pedidos SET pago_reportado = true
+         WHERE id = $1 AND cliente_id = $2 AND pago_estado = 'pendiente'
+         RETURNING id, pago_reportado`,
+        [req.params.pedidoId, req.params.id]
+    );
+    if (r.rows.length === 0) return res.status(400).json({ message: 'No hay un pago pendiente para reportar en este pedido' });
+    res.json({ message: 'Gracias, verificaremos tu pago y confirmaremos el pedido.' });
+}));
+
+// =========================================================
+// GARANTÍAS EXTENDIDAS DEL CLIENTE
+// =========================================================
+app.get('/api/clientes/:id/garantias', asyncRoute(async (req, res) => {
+    const r = await pool.query(
+        `SELECT g.id, g.folio, g.codigo, g.plan, g.meses, g.costo, g.inicio, g.vence, g.estado,
+                g.reclamo_fecha, g.reclamo_desc, g.resuelto_fecha, g.resuelto_nota,
+                pr.nombre AS producto, ped.numero_orden
+         FROM garantias g
+         LEFT JOIN productos pr ON pr.id = g.producto_id
+         LEFT JOIN pedidos ped ON ped.id = g.pedido_id
+         WHERE g.cliente_id = $1 ORDER BY g.id DESC`,
+        [req.params.id]
+    );
+    res.json(r.rows.map((g) => ({ ...g, vigente: g.estado === 'activa' && new Date(g.vence) >= new Date(new Date().toDateString()) })));
+}));
+
+app.post('/api/clientes/:id/garantias/:garId/reclamo', asyncRoute(async (req, res) => {
+    const { descripcion } = req.body;
+    if (!descripcion || !descripcion.trim()) return res.status(400).json({ message: 'Describe el problema para levantar el reclamo' });
+    const g = await pool.query('SELECT id, estado, vence, reclamo_fecha FROM garantias WHERE id = $1 AND cliente_id = $2', [req.params.garId, req.params.id]);
+    if (g.rows.length === 0) return res.status(404).json({ message: 'Garantía no encontrada' });
+    const row = g.rows[0];
+    if (row.estado !== 'activa') return res.status(400).json({ message: `Esta garantía está ${row.estado} y no admite reclamos` });
+    if (new Date(row.vence) < new Date(new Date().toDateString())) return res.status(400).json({ message: 'Esta garantía ya venció' });
+    if (row.reclamo_fecha) return res.status(400).json({ message: 'Ya hay un reclamo en curso para esta garantía' });
+    await pool.query(
+        `UPDATE garantias SET reclamo_fecha = CURRENT_TIMESTAMP, reclamo_desc = $1 WHERE id = $2`,
+        [descripcion.trim().slice(0, 800), req.params.garId]
+    );
+    res.json({ message: 'Reclamo registrado. El equipo lo revisará y te contactará.' });
+}));
+
 // =========================================================
 // MÉTODOS DE PAGO DEL CLIENTE
 //   Solo se guarda marca + últimos 4 + expiración. El número
@@ -1009,9 +1250,21 @@ app.put('/api/pedidos/:id/cancelar', requireCliente, asyncRoute(async (req, res)
                 [it.producto_id, it.cantidad]
             );
         }
+        // Cancelar las garantías de este pedido
+        await client.query(`UPDATE garantias SET estado = 'cancelada' WHERE pedido_id = $1 AND estado = 'activa'`, [req.params.id]);
+
+        // Devolver los puntos canjeados (el descuento se retuvo al crear el pedido)
+        const canjeados = Math.round(Number(pedido.descuento || 0) / VALOR_PUNTO);
+        if (canjeados > 0) {
+            await client.query('UPDATE clientes SET puntos = puntos + $1 WHERE id = $2', [canjeados, cliente_id]);
+            await client.query(
+                `INSERT INTO movimientos_puntos (cliente_id, tipo, puntos, motivo, pedido_id) VALUES ($1,'ajuste',$2,$3,$4)`,
+                [cliente_id, canjeados, `Devolución por cancelar ${pedido.numero_orden}`, pedido.id]
+            );
+        }
         await client.query(`UPDATE pedidos SET estado = 'cancelado' WHERE id = $1`, [req.params.id]);
         await client.query('COMMIT');
-        res.json({ message: 'Pedido cancelado y stock restaurado' });
+        res.json({ message: canjeados > 0 ? `Pedido cancelado. Se devolvieron ${canjeados} puntos y el stock.` : 'Pedido cancelado y stock restaurado' });
     } catch (error) {
         await client.query('ROLLBACK');
         res.status(400).json({ message: error.message });
@@ -1074,6 +1327,21 @@ app.post('/api/admin/clientes', requireAdmin, asyncRoute(async (req, res) => {
     );
     await pool.query('INSERT INTO metricas_clientes (cliente_id) VALUES ($1) ON CONFLICT (cliente_id) DO NOTHING', [r.rows[0].id]);
     res.status(201).json({ message: 'Cliente creado', cliente: r.rows[0] });
+}));
+
+app.get('/api/admin/clientes/:id/pedidos', asyncRoute(async (req, res) => {
+    const result = await pool.query(
+        `SELECT p.id, p.numero_orden, p.fecha_pedido, p.total, p.estado, p.metodo_pago,
+                p.pago_estado, p.pago_reportado,
+                STRING_AGG(pr.nombre, ', ') AS productos
+         FROM pedidos p
+         LEFT JOIN pedido_items pi ON p.id = pi.pedido_id
+         LEFT JOIN productos pr ON pi.producto_id = pr.id
+         WHERE p.cliente_id = $1
+         GROUP BY p.id ORDER BY p.fecha_pedido DESC`,
+        [req.params.id]
+    );
+    res.json(result.rows);
 }));
 
 app.get('/api/admin/clientes/:id', asyncRoute(async (req, res) => {
@@ -1638,6 +1906,122 @@ app.put('/api/admin/pedidos/:id/estado', asyncRoute(async (req, res) => {
     );
     if (result.rows.length === 0) return res.status(404).json({ message: 'Pedido no encontrado' });
     res.json({ message: 'Estado actualizado', pedido: result.rows[0] });
+}));
+
+// Registrar el pago de un pedido SPEI / en tienda: lo marca como pagado,
+// lo pasa a 'confirmado' y recién ahí otorga los puntos y actualiza métricas.
+app.post('/api/admin/pedidos/:id/registrar-pago', asyncRoute(async (req, res) => {
+    const client = await pool.connect();
+    try {
+        await client.query('BEGIN');
+        const pr = await client.query('SELECT * FROM pedidos WHERE id = $1 FOR UPDATE', [req.params.id]);
+        if (pr.rows.length === 0) { await client.query('ROLLBACK'); return res.status(404).json({ message: 'Pedido no encontrado' }); }
+        const pedido = pr.rows[0];
+        if (pedido.pago_estado === 'pagado') { await client.query('ROLLBACK'); return res.status(400).json({ message: 'Este pedido ya está pagado' }); }
+        if (pedido.estado === 'cancelado') { await client.query('ROLLBACK'); return res.status(400).json({ message: 'El pedido está cancelado' }); }
+
+        await client.query(
+            `UPDATE pedidos SET pago_estado = 'pagado',
+                 estado = CASE WHEN estado = 'pendiente' THEN 'confirmado' ELSE estado END,
+                 fecha_confirmacion = COALESCE(fecha_confirmacion, CURRENT_TIMESTAMP)
+             WHERE id = $1`,
+            [req.params.id]
+        );
+        const puntos_ganados = await aplicarCobroPedido(client, pedido);
+        await client.query('COMMIT');
+        res.json({ message: 'Pago registrado. Pedido confirmado.', puntos_ganados });
+    } catch (e) {
+        await client.query('ROLLBACK');
+        throw e;
+    } finally {
+        client.release();
+    }
+}));
+
+// =========================================================
+// ADMIN: GARANTÍAS EXTENDIDAS
+// =========================================================
+function conVigencia(g) {
+    const hoy = new Date(new Date().toDateString());
+    return {
+        ...g,
+        vencida: g.estado === 'activa' && new Date(g.vence) < hoy,
+        dias_restantes: Math.ceil((new Date(g.vence) - hoy) / 86400000),
+    };
+}
+
+app.get('/api/admin/garantias', asyncRoute(async (req, res) => {
+    const { estado, busqueda } = req.query;
+    const cond = [];
+    const vals = [];
+    let i = 1;
+    if (estado && estado !== 'Todas') { cond.push(`g.estado = $${i++}`); vals.push(estado); }
+    if (busqueda) {
+        cond.push(`(g.folio ILIKE $${i} OR g.codigo ILIKE $${i} OR c.nombre ILIKE $${i} OR pr.nombre ILIKE $${i} OR ped.numero_orden ILIKE $${i})`);
+        vals.push(`%${busqueda}%`); i++;
+    }
+    const where = cond.length ? `WHERE ${cond.join(' AND ')}` : '';
+    const r = await pool.query(
+        `SELECT g.id, g.folio, g.codigo, g.plan, g.meses, g.costo, g.inicio, g.vence, g.estado,
+                g.reclamo_fecha, g.reclamo_desc, g.resuelto_fecha, g.resuelto_nota,
+                c.id AS cliente_id, c.nombre AS cliente_nombre, c.correo AS cliente_correo,
+                pr.nombre AS producto, ped.numero_orden, u.nombre AS resuelto_por_nombre
+         FROM garantias g
+         LEFT JOIN clientes c ON c.id = g.cliente_id
+         LEFT JOIN productos pr ON pr.id = g.producto_id
+         LEFT JOIN pedidos ped ON ped.id = g.pedido_id
+         LEFT JOIN usuarios u ON u.id = g.resuelto_por
+         ${where} ORDER BY g.reclamo_fecha DESC NULLS LAST, g.id DESC`,
+        vals
+    );
+    const conteos = await pool.query(
+        `SELECT COUNT(*) FILTER (WHERE estado='activa') AS activas,
+                COUNT(*) FILTER (WHERE estado='activa' AND reclamo_fecha IS NOT NULL) AS con_reclamo,
+                COUNT(*) FILTER (WHERE estado='usada') AS usadas,
+                COUNT(*) FILTER (WHERE estado IN ('vencida','cancelada')) AS inactivas
+         FROM garantias`
+    );
+    res.json({ conteos: conteos.rows[0], garantias: r.rows.map(conVigencia) });
+}));
+
+// Validar una garantía por su código (herramienta de mostrador)
+app.get('/api/admin/garantias/validar/:codigo', asyncRoute(async (req, res) => {
+    const r = await pool.query(
+        `SELECT g.id, g.folio, g.codigo, g.plan, g.meses, g.costo, g.inicio, g.vence, g.estado,
+                g.reclamo_fecha, g.reclamo_desc, g.resuelto_fecha, g.resuelto_nota,
+                c.id AS cliente_id, c.nombre AS cliente_nombre, c.correo AS cliente_correo,
+                pr.nombre AS producto, ped.numero_orden
+         FROM garantias g
+         LEFT JOIN clientes c ON c.id = g.cliente_id
+         LEFT JOIN productos pr ON pr.id = g.producto_id
+         LEFT JOIN pedidos ped ON ped.id = g.pedido_id
+         WHERE UPPER(g.codigo) = UPPER($1)`,
+        [req.params.codigo.trim()]
+    );
+    if (r.rows.length === 0) return res.status(404).json({ message: 'No existe una garantía con ese código' });
+    const g = conVigencia(r.rows[0]);
+    g.valida = g.estado === 'activa' && !g.vencida;
+    res.json(g);
+}));
+
+// Resolver una garantía: marcarla como usada (o cerrar el reclamo)
+app.put('/api/admin/garantias/:id', asyncRoute(async (req, res) => {
+    const { estado, nota } = req.body;
+    const validos = ['activa', 'usada', 'vencida', 'cancelada'];
+    if (!validos.includes(estado)) return res.status(400).json({ message: 'Estado no válido' });
+    const activa = estado === 'activa';
+    const r = await pool.query(
+        `UPDATE garantias
+         SET estado = $1,
+             resuelto_nota = $2,
+             resuelto_por = $3,
+             resuelto_fecha = CASE WHEN $5 THEN CURRENT_TIMESTAMP ELSE resuelto_fecha END,
+             reclamo_fecha  = CASE WHEN $6 THEN NULL ELSE reclamo_fecha END
+         WHERE id = $4 RETURNING *`,
+        [estado, (nota || '').slice(0, 800) || null, req.usuario.id, req.params.id, !activa, activa]
+    );
+    if (r.rows.length === 0) return res.status(404).json({ message: 'Garantía no encontrada' });
+    res.json({ message: 'Garantía actualizada', garantia: r.rows[0] });
 }));
 
 // =========================================================

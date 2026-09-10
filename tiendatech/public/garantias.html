@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Mis garantías · TiendaTech</title>
+<link rel="stylesheet" href="/css/style.css" />
+</head>
+<body>
+<div id="navbar-placeholder"></div>
+
+<div class="cuenta-shell">
+    <nav class="cuenta-nav" id="cuenta-nav"></nav>
+    <main class="cuenta-panel" id="cuenta-panel"><div class="empty-state">Cargando…</div></main>
+</div>
+
+<div id="footer-placeholder"></div>
+<div class="modal-overlay" id="modal-generico"><div class="modal" id="modal-generico-body"></div></div>
+
+<script src="/js/theme.js"></script>
+<script src="/js/api.js"></script>
+<script src="/js/icons.js"></script>
+<script src="/js/toast.js"></script>
+<script src="/js/layout.js"></script>
+<script src="/js/chatbot.js"></script>
+<script src="/js/cuenta.js"></script>
+<script>
+let CID = null;
+const EST_LABEL = { activa: 'Activa', usada: 'Usada', vencida: 'Vencida', cancelada: 'Cancelada' };
+
+montarCuenta('garantias', async (panel, P) => {
+    CID = P.id;
+    await pintar(panel);
+});
+
+async function pintar(panel) {
+    const list = await api(`/clientes/${CID}/garantias`);
+    panel.innerHTML = `
+        <div class="cuenta-head"><h1>Mis garantías</h1><p>Garantías extendidas de tus compras. Usa el código para validarlas en servicio.</p></div>
+        ${list.length === 0
+            ? '<div class="empty-state">Aún no tienes garantías extendidas.<br>Puedes agregar una al elegir un producto en el catálogo.</div>'
+            : list.map((g) => {
+                const activa = g.vigente;
+                return `
+                <div class="gar-card ${activa ? '' : 'inactiva'}">
+                    <div class="gar-top">
+                        <div>
+                            <div class="gar-prod">${g.producto || 'Producto'}</div>
+                            <div class="gar-sub">${g.plan} · pedido <span class="mono">${g.numero_orden || '—'}</span></div>
+                        </div>
+                        <span class="estado-pill gar-est-${g.estado}">${EST_LABEL[g.estado] || g.estado}${(g.estado === 'activa' && !g.vigente) ? ' (vencida)' : ''}</span>
+                    </div>
+                    <div class="gar-grid">
+                        <div><span>Folio</span><strong class="mono">${g.folio}</strong></div>
+                        <div><span>Código para validar</span><strong class="mono gar-codigo">${g.codigo}</strong></div>
+                        <div><span>Vigencia</span><strong>${formatoFecha(g.inicio)} → ${formatoFecha(g.vence)}</strong></div>
+                        <div><span>Cobertura</span><strong>${g.meses} meses · ${formatoMoneda(g.costo)}</strong></div>
+                    </div>
+                    ${g.reclamo_fecha ? `
+                        <div class="gar-reclamo">
+                            ${icon('clock', 13)} Reclamo enviado el ${formatoFecha(g.reclamo_fecha)}${g.resuelto_fecha ? ` · resuelto el ${formatoFecha(g.resuelto_fecha)}` : ' · en revisión'}
+                            <div style="color:var(--text-muted);margin-top:2px">${g.reclamo_desc || ''}</div>
+                            ${g.resuelto_nota ? `<div style="margin-top:4px"><strong>Respuesta:</strong> ${g.resuelto_nota}</div>` : ''}
+                        </div>` : ''}
+                    ${(activa && !g.reclamo_fecha) ? `<div class="gar-acts"><button class="btn btn-primary btn-sm" onclick='usarGarantia(${g.id})'>Usar la garantía</button></div>` : ''}
+                </div>`;
+            }).join('')}
+    `;
+}
+function refrescar() { pintar(document.getElementById('cuenta-panel')); }
+
+function usarGarantia(id) {
+    document.getElementById('modal-generico-body').innerHTML = `
+        <button class="modal-close" onclick="document.getElementById('modal-generico').classList.remove('open')">${icon('x', 20)}</button>
+        <h3>Usar garantía</h3>
+        <p style="font-size:.86rem;color:var(--text-muted)">Cuéntanos qué falla presenta el producto. El equipo revisará tu garantía y te contactará.</p>
+        <div class="field"><label>Descripción del problema</label><textarea id="gr-desc" rows="4" placeholder="Ej. La pantalla dejó de encender, hace un ruido al arrancar…"></textarea></div>
+        <div id="gr-err" style="color:var(--danger);font-size:.83rem;margin-bottom:10px;display:none"></div>
+        <button class="btn btn-primary" style="width:100%" onclick="enviarReclamo(${id})">Enviar solicitud</button>
+    `;
+    document.getElementById('modal-generico').classList.add('open');
+}
+async function enviarReclamo(id) {
+    const desc = document.getElementById('gr-desc').value.trim();
+    const err = document.getElementById('gr-err');
+    err.style.display = 'none';
+    if (!desc) { err.textContent = 'Describe el problema.'; err.style.display = 'block'; return; }
+    try {
+        const r = await api(`/clientes/${CID}/garantias/${id}/reclamo`, { method: 'POST', body: { descripcion: desc } });
+        document.getElementById('modal-generico').classList.remove('open');
+        toast(r.message || 'Reclamo registrado', 'ok');
+        refrescar();
+    } catch (e) { err.textContent = e.message; err.style.display = 'block'; }
+}
+</script>
+</body>
+</html>

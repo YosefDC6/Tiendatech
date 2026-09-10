@@ -6,7 +6,7 @@
 <title>Detalle de cliente · Admin TiendaTech</title>
 <link rel="stylesheet" href="/css/style.css" />
 </head>
-<body class="theme-light">
+<body>
 <div class="admin-shell">
     <aside class="admin-sidebar" id="admin-sidebar-placeholder"></aside>
     <main class="admin-main" id="main"><p>Cargando…</p></main>
@@ -19,6 +19,7 @@
 <script src="/js/icons.js"></script>
 <script src="/js/toast.js"></script>
 <script src="/admin/js/admin-layout.js"></script>
+<script src="/admin/js/interaccion-sim.js"></script>
 <script>
 requireAuthAdmin();
 renderAdminSidebar('clientes');
@@ -64,14 +65,65 @@ async function cargar() {
 
         <nav class="crm-tabs">
             <a href="?id=${ID}&tab=info" class="${TAB === 'info' ? 'active' : ''}">Información</a>
+            <a href="?id=${ID}&tab=pedidos" class="${TAB === 'pedidos' ? 'active' : ''}">Pedidos (${C.resumen.pedidos || 0})</a>
             <a href="?id=${ID}&tab=interacciones" class="${TAB === 'interacciones' ? 'active' : ''}">Interacciones (${m.total_interacciones || 0})</a>
             <a href="?id=${ID}&tab=evaluaciones" class="${TAB === 'evaluaciones' ? 'active' : ''}">Evaluaciones (${C.resumen.resenas})</a>
         </nav>
         <div id="tab-body"><p>Cargando…</p></div>
     `;
     if (TAB === 'info') tabInfo();
+    else if (TAB === 'pedidos') tabPedidos();
     else if (TAB === 'interacciones') tabInteracciones();
     else tabEvaluaciones();
+}
+
+const ESTADO_TAG = { pendiente: 'Pendiente', confirmado: 'Confirmado', procesando: 'En preparación', enviado: 'Enviado', entregado: 'Entregado', cancelado: 'Cancelado' };
+async function tabPedidos() {
+    const b = document.getElementById('tab-body');
+    let list;
+    try { list = await api(`/admin/clientes/${ID}/pedidos`); }
+    catch (e) { b.innerHTML = `<div class="card"><p style="margin:0">${e.message}</p></div>`; return; }
+    if (list.length === 0) { b.innerHTML = '<div class="card"><p style="margin:0">Este cliente no tiene pedidos.</p></div>'; return; }
+    const totalGastado = list.filter((p) => p.estado !== 'cancelado').reduce((a, p) => a + Number(p.total), 0);
+    b.innerHTML = `
+        <div class="card">
+            <p style="margin:0 0 12px;color:var(--text-muted);font-size:.86rem">${list.length} pedido(s) · ${formatoMoneda(totalGastado)} en compras no canceladas.</p>
+            <div class="table-wrap">
+                <table>
+                    <thead><tr><th>Orden</th><th>Fecha</th><th>Productos</th><th>Total</th><th>Estado</th><th>Pago</th><th></th></tr></thead>
+                    <tbody>
+                        ${list.map((p) => `
+                            <tr>
+                                <td class="mono">${p.numero_orden}</td>
+                                <td>${formatoFecha(p.fecha_pedido)}</td>
+                                <td>${p.productos || '—'}</td>
+                                <td class="mono">${formatoMoneda(p.total)}</td>
+                                <td><span class="tag">${ESTADO_TAG[p.estado] || p.estado}</span></td>
+                                <td><span class="tag" style="color:${p.pago_estado === 'pagado' ? 'var(--success)' : 'var(--warning)'};border-color:currentColor">${p.pago_estado === 'pagado' ? 'Pagado' : 'Pendiente'}</span></td>
+                                <td style="white-space:nowrap">
+                                    <button class="btn btn-outline btn-sm" onclick="detPedido(${p.id}, this)">Detalle</button>
+                                    <a class="btn btn-ghost btn-sm" href="/admin/recibo.html?id=${p.id}" target="_blank" rel="noopener">Comprobante</a>
+                                </td>
+                            </tr>
+                            <tr id="detp-${p.id}" hidden><td colspan="7" style="background:var(--bg-panel-2)"></td></tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+            </div>
+        </div>`;
+}
+async function detPedido(id, btn) {
+    const row = document.getElementById('detp-' + id);
+    if (!row.hidden) { row.hidden = true; btn.textContent = 'Detalle'; return; }
+    const d = await api(`/pedidos/${id}/detalle`);
+    row.firstElementChild.innerHTML = `
+        <div style="padding:10px 4px">
+            ${d.items.map((i) => `<div style="display:flex;justify-content:space-between;font-size:.86rem;padding:2px 0"><span>${i.cantidad}× ${i.nombre}</span><span class="mono">${formatoMoneda(i.subtotal)}</span></div>`).join('')}
+            <div style="border-top:1px solid var(--line);margin-top:6px;padding-top:6px;font-size:.82rem;color:var(--text-muted)">
+                Subtotal ${formatoMoneda(d.subtotal)} · IVA ${formatoMoneda(d.impuestos)} · Envío ${Number(d.envio) === 0 ? 'Gratis' : formatoMoneda(d.envio)}${Number(d.descuento) > 0 ? ' · Descuento -' + formatoMoneda(d.descuento) : ''} · Pago: ${d.metodo_pago || '—'}
+            </div>
+        </div>`;
+    row.hidden = false; btn.textContent = 'Ocultar';
 }
 
 function tabInfo() {
@@ -189,28 +241,14 @@ async function guardarEtapa() {
 }
 
 function nuevaInteraccion() {
-    abrirModal(`
-        <h3>Registrar interacción</h3>
-        <div class="field"><label>Tipo</label>
-            <select id="ni-tipo">
-                <option value="llamada">Llamada</option><option value="correo">Correo</option>
-                <option value="reunion">Reunión</option><option value="soporte">Soporte</option>
-            </select>
-        </div>
-        <div class="field"><label>Descripción</label><textarea id="ni-desc" rows="3"></textarea></div>
-        <button class="btn btn-primary" style="width:100%" onclick="guardarInteraccion()">Guardar</button>
-    `);
-}
-async function guardarInteraccion() {
-    const descripcion = v('ni-desc');
-    if (!descripcion) { toast('Escribe una descripción', 'warn'); return; }
-    try {
-        await api(`/admin/clientes/${ID}/interacciones`, { method: 'POST', body: {
-            tipo: document.getElementById('ni-tipo').value, descripcion, usuario_id: Sesion.usuario().id,
-        }});
-        cerrarModal(); toast('Interacción registrada', 'ok');
-        location.href = `?id=${ID}&tab=interacciones`;
-    } catch (e) { toast(e.message, 'error'); }
+    simuladorInteraccion({
+        cliente: { id: Number(ID), nombre: C.nombre, correo: C.correo, telefono: C.telefono },
+        onGuardar: (tipo, descripcion) => api(`/admin/clientes/${ID}/interacciones`, {
+            method: 'POST',
+            body: { tipo, descripcion, usuario_id: Sesion.usuario().id },
+        }),
+        despues: () => { location.href = `?id=${ID}&tab=interacciones`; },
+    });
 }
 
 const v = (id) => document.getElementById(id).value.trim();

@@ -29,6 +29,58 @@ const CANCELABLES = ['pendiente', 'confirmado'];
 let CID = null;
 let RESN = {}; // producto_id -> calificacion en curso
 
+const PASOS_RASTREO = [
+    { k: 'confirmado', label: 'Confirmado',      ic: 'check',   f: 'fecha_confirmacion', fb: 'fecha_pedido' },
+    { k: 'procesando', label: 'En preparación',  ic: 'package', f: null },
+    { k: 'enviado',    label: 'Enviado',         ic: 'truck',   f: 'fecha_envio' },
+    { k: 'entregado',  label: 'Entregado',       ic: 'home',    f: 'fecha_entrega' },
+];
+const MSG_RASTREO = {
+    confirmado: 'Pedido confirmado. Pronto empezamos a prepararlo.',
+    procesando: 'Estamos preparando tu pedido.',
+    enviado:    'Tu pedido va en camino a tu dirección.',
+    entregado:  'Entregado. ¡Gracias por tu compra!',
+};
+
+function rastreoPedido(p) {
+    if (p.estado === 'cancelado') {
+        return `<div class="rastreo-cancelado">${icon('x', 15)} Pedido cancelado${Number(p.descuento) > 0 ? ' · puntos devueltos' : ''}</div>`;
+    }
+    if (p.pago_estado === 'pendiente') {
+        const esSPEI = /spei/i.test(p.metodo_pago || '');
+        return `
+            <div class="rastreo-aviso">
+                ${icon('clock', 16)}
+                <div>
+                    <strong>Falta completar tu pago.</strong>
+                    ${esSPEI ? 'Haz la transferencia SPEI' : 'Paga en caja'} con la referencia
+                    <span class="ra-ref">${p.pago_referencia || '—'}</span>.
+                    ${p.pago_reportado
+                        ? ' Ya nos avisaste que pagaste; lo estamos verificando.'
+                        : ' Tu pedido empieza a prepararse en cuanto confirmemos el pago.'}
+                </div>
+            </div>`;
+    }
+    const cur = PASOS_RASTREO.findIndex((s) => s.k === p.estado);
+    const iCur = cur < 0 ? 0 : cur;
+    const completo = p.estado === 'entregado';   // pedido terminado: todo en verde
+    const pasos = PASOS_RASTREO.map((s, i) => {
+        const done = completo || i < iCur;
+        const cls = done ? 'done' : (i === iCur ? 'actual' : '');
+        const fecha = (i <= iCur && s.f && p[s.f]) ? formatoFecha(p[s.f])
+            : (i === 0 && s.fb && p[s.fb]) ? formatoFecha(p[s.fb]) : '';
+        return `
+            <div class="rastreo-step ${cls}">
+                <div class="rs-ic">${done ? icon('check', 15) : icon(s.ic, 15)}</div>
+                <div>
+                    <div class="rs-label">${s.label}</div>
+                    ${fecha ? `<div class="rs-date">${fecha}</div>` : ''}
+                </div>
+            </div>`;
+    }).join('');
+    return `<div class="rastreo">${pasos}</div><div class="rastreo-msg">${MSG_RASTREO[p.estado] || ''}</div>`;
+}
+
 function estrellas(n, editable, orderId, pid) {
     let s = '';
     for (let i = 1; i <= 5; i++) {
@@ -47,22 +99,20 @@ montarCuenta('pedidos', async (panel, P) => {
     }
     panel.innerHTML = `<div class="cuenta-head"><h1>Mis pedidos</h1><p>${pedidos.length} pedido(s).</p></div><div id="lista-pedidos"></div>`;
     document.getElementById('lista-pedidos').innerHTML = pedidos.map((p) => {
-        const idx = FLUJO.indexOf(p.estado);
-        const track = p.estado === 'cancelado'
-            ? '<div style="color:var(--danger);font-size:.82rem;margin-top:8px">Pedido cancelado</div>'
-            : `<div class="order-track">${FLUJO.map((_, i) => `<div class="step ${i <= idx ? 'done' : ''}"></div>`).join('')}</div>
-               <div style="font-size:.78rem;color:var(--text-muted)">${['Confirmado', 'En preparación', 'Enviado', 'Entregado'][Math.max(idx, 0)]}</div>`;
+        const pendientePago = p.pago_estado === 'pendiente';
         return `
         <div class="order-row">
             <div class="order-top">
                 <span class="mono">${p.numero_orden}</span>
-                <span class="tag">${ESTADO_LABEL[p.estado] || p.estado}</span>
+                <span class="tag">${pendientePago ? 'Pago pendiente' : (ESTADO_LABEL[p.estado] || p.estado)}</span>
             </div>
             <div style="font-size:.85rem;color:var(--text-muted)">${formatoFecha(p.fecha_pedido)} · ${p.productos || '—'}</div>
             <div style="font-weight:700;margin-top:6px">${formatoMoneda(p.total)}</div>
-            ${track}
-            <div style="display:flex;gap:8px;margin-top:12px">
+            ${rastreoPedido(p)}
+            <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
                 <button class="btn btn-outline btn-sm" onclick="detallePedido(${p.id})">Ver detalle</button>
+                <a class="btn btn-ghost btn-sm" href="/recibo.html?id=${p.id}">${pendientePago ? 'Ficha de pago' : 'Comprobante'}</a>
+                ${pendientePago && !p.pago_reportado ? `<button class="btn btn-primary btn-sm" onclick="reportarPago(${p.id})">Ya realicé el pago</button>` : ''}
                 ${p.estado === 'entregado' ? `<button class="btn btn-primary btn-sm" onclick="detallePedido(${p.id}, true)">Dejar reseña</button>` : ''}
                 ${CANCELABLES.includes(p.estado) ? `<button class="btn btn-ghost btn-sm" onclick="cancelarPedido(${p.id})">Cancelar</button>` : ''}
             </div>
@@ -159,6 +209,15 @@ async function guardarResn(orderId, pid) {
             <div class="pr-cur">${estrellas(val)}${com ? ' · ' + com.replace(/</g, '&lt;') : ''}
                 <button class="btn btn-ghost btn-sm" onclick="editarResn(${orderId}, ${pid})">Editar</button></div>
         </div>`;
+    } catch (e) { toast(e.message, 'error'); }
+}
+
+async function reportarPago(id) {
+    if (!(await confirmar('¿Confirmas que ya realizaste el pago de este pedido?', { okText: 'Sí, ya pagué' }))) return;
+    try {
+        const r = await api(`/clientes/${CID}/pedidos/${id}/reportar-pago`, { method: 'POST' });
+        toast(r.message || 'Pago reportado', 'ok');
+        setTimeout(() => location.reload(), 700);
     } catch (e) { toast(e.message, 'error'); }
 }
 

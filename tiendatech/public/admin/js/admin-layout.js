@@ -17,6 +17,7 @@ const ADMIN_SECCIONES = [
         { href: '/admin/interacciones.html', key: 'interacciones', ic: 'chat',    label: 'Interacciones' },
         { href: '/admin/evaluaciones.html',  key: 'evaluaciones',  ic: 'star',    label: 'Evaluaciones' },
         { href: '/admin/soporte.html',       key: 'soporte',       ic: 'help',    label: 'Soporte' },
+        { href: '/admin/garantias.html',     key: 'garantias',     ic: 'shield',  label: 'Garantías' },
         { href: '/admin/reportes.html',      key: 'reportes',      ic: 'grid',    label: 'Reportes' },
     ] },
     { titulo: 'Tienda', links: [
@@ -36,9 +37,9 @@ const ADMIN_SECCIONES = [
 // CHECK de la tabla usuarios (db/database.sql).
 const PERMISOS = {
     admin:    '*',
-    vendedor: ['dashboard', 'clientes', 'interacciones', 'evaluaciones', 'soporte', 'reportes', 'pedidos', 'productos', 'chatbot', 'mi-actividad', 'configuracion'],
-    soporte:  ['dashboard', 'clientes', 'interacciones', 'evaluaciones', 'soporte', 'reportes', 'mi-actividad', 'configuracion'],
-    almacen:  ['dashboard', 'pedidos', 'productos', 'chatbot', 'mi-actividad', 'configuracion'],
+    vendedor: ['dashboard', 'clientes', 'interacciones', 'evaluaciones', 'soporte', 'garantias', 'reportes', 'pedidos', 'productos', 'chatbot', 'mi-actividad', 'configuracion'],
+    soporte:  ['dashboard', 'clientes', 'interacciones', 'evaluaciones', 'soporte', 'garantias', 'reportes', 'mi-actividad', 'configuracion'],
+    almacen:  ['dashboard', 'pedidos', 'productos', 'garantias', 'chatbot', 'mi-actividad', 'configuracion'],
 };
 const ROL_LABEL = { admin: 'Administrador', vendedor: 'Vendedor', soporte: 'Soporte', almacen: 'Almacén' };
 
@@ -90,6 +91,25 @@ function cerrarSesionAdmin() {
     window.location.href = '/admin/login.html';
 }
 
+// Exporta un array de objetos a CSV y lo descarga.
+function descargarCSV(nombreArchivo, filas) {
+    if (!filas || filas.length === 0) { if (window.toast) toast('No hay datos para exportar', 'warn'); return; }
+    const cols = Object.keys(filas[0]);
+    const esc = (v) => {
+        const s = v === null || v === undefined ? '' : String(v);
+        return /[",\n;]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+    };
+    const csv = [cols.join(','), ...filas.map((f) => cols.map((c) => esc(f[c])).join(','))].join('\r\n');
+    const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = nombreArchivo.endsWith('.csv') ? nombreArchivo : nombreArchivo + '.csv';
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    if (window.toast) toast('CSV descargado', 'ok');
+}
+window.descargarCSV = descargarCSV;
+
 // Encabezado de página estándar del panel
 function adminHeader(titulo, subtitulo, accionHTML) {
     return `<div class="admin-topbar">
@@ -99,4 +119,3 @@ function adminHeader(titulo, subtitulo, accionHTML) {
 }
 window.adminHeader = adminHeader;
 
-document.body.classList.add('theme-light');
