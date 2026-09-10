@@ -1,0 +1,554 @@
+===============================================================================
+ TIENDATECH CRM  -  MANUAL DE USUARIO
+ Tienda de electronica / computo con tienda en linea, CRM y chatbot.
+ Ultima actualizacion: septiembre 2026
+===============================================================================
+
+Este documento explica, seccion por seccion, que hace cada parte del sistema
+para tres perfiles:
+
+   - CLIENTE   : la persona que compra en la tienda en linea.
+   - ADMIN     : administrador del negocio, acceso total al panel.
+   - VENDEDOR  : personal interno, acceso al panel salvo la gestion de usuarios.
+
+Si eres un admin nuevo, lee las secciones 1, 2, 4 y 6. El resto sirve de
+consulta.
+
+
+===============================================================================
+ 1. ARRANQUE DEL SISTEMA (para quien instala o levanta el proyecto)
+===============================================================================
+
+Requisitos
+   - Node.js 18 o superior.
+   - PostgreSQL 16 o superior (se probo con 18).
+
+Configuracion de la base
+   - El archivo  tiendatech/db.config.js  tiene usuario, host, base, password
+     y puerto. Ajustalo a tu instalacion local. Por defecto:
+        user: postgres   host: localhost   database: tiendatech
+        password: 12345678   port: 5432
+
+Crear y cargar la base (todo en un solo archivo, se puede repetir)
+   1. Crear la base:              CREATE DATABASE tiendatech;
+   2. Cargar esquema + datos:     psql -U postgres -d tiendatech -f db/database.sql
+   El archivo db/database.sql borra todo y lo vuelve a crear: esquema, triggers,
+   datos de ejemplo y contrasenas ya encriptadas. Es seguro re-ejecutarlo.
+
+Levantar el servidor
+   - Dentro de la carpeta  tiendatech/  ejecutar:   npm install   (una vez)
+   - Luego:   npm start
+   - Al arrancar, la consola muestra DOS lineas:
+        TiendaTech escuchando en http://localhost:3000
+        Base de datos: conectada (tiendatech@localhost:5432) - 20 productos
+     Si en vez de "conectada" dice "SIN CONEXION" o "SIN TABLAS", revisa que
+     PostgreSQL este encendido y que db.config.js sea correcto, o vuelve a
+     cargar db/database.sql.
+
+Direcciones
+   - Tienda (clientes):     http://localhost:3000/
+   - Panel interno:         http://localhost:3000/admin/login.html
+     (no hay enlace desde la tienda; se entra por URL, a proposito)
+
+
+===============================================================================
+ 2. ROLES, ACCESOS Y CUENTAS DE PRUEBA
+===============================================================================
+
+CLIENTE
+   - Se registra solo desde la tienda (boton "Crear cuenta").
+   - Solo ve y edita SUS datos, SUS pedidos, SU carrito, SUS puntos, etc.
+   - Nunca puede entrar al panel interno.
+
+VENDEDOR
+   - Cuenta creada por un admin desde el panel (seccion Equipo).
+   - Entra por /admin/login.html. Ve todo el CRM y la tienda EXCEPTO:
+        * la seccion "Equipo" (alta/baja de usuarios internos) queda oculta.
+   - Puede registrar interacciones, atender tickets, cambiar etapas de
+     cliente, actualizar pedidos e inventario.
+
+ADMIN
+   - Acceso total al panel, incluida la gestion de usuarios internos.
+
+Cuentas de prueba (tras cargar db/database.sql)
+   Panel interno:
+      admin@tiendatech.mx           / admin123        (administrador)
+      laura.vendedor@tiendatech.mx  / vendedor123     (vendedor)
+   Tienda (clientes), todas con password  demo123 :
+      mariana@correo.com   (nivel Oro, con pedidos y puntos)
+      diego@correo.com     (nivel Oro)
+      sofia@correo.com     (prospecto, sin compras)
+      carlos@correo.com    (inactivo)
+
+Seguridad de sesion
+   - El token de cliente y el token de admin se guardan por separado en el
+     navegador y NUNCA se mezclan: la tienda usa el de cliente, /admin/* usa
+     el de admin.
+   - Si el token de admin vence o es invalido, cualquier pantalla del panel
+     regresa sola a /admin/login.html.
+   - "Cerrar sesion": en la tienda esta en el menu de la cuenta (arriba a la
+     derecha); en el panel, al pie de la barra lateral.
+
+
+===============================================================================
+ 3. LADO CLIENTE  -  LA TIENDA EN LINEA
+===============================================================================
+
+3.1  INICIO  (index.html)
+   - Portada con el titulo grande, buscador y accesos.
+   - Bloque "Explora": categorias, usos ("gaming", "oficina"...) y una banda
+     que invita a preguntarle al asesor (chatbot) si no sabes que comprar.
+   - "Como funciona": 3 pasos (explora / pregunta al asesor / compra y gana
+     puntos).
+   - "Destacados" y "Vistos recientemente".
+   - Cuando la URL lleva un filtro (busqueda, categoria, uso, precio) la
+     portada se convierte en CATALOGO: solo la lista de productos con filtros.
+
+3.2  BUSCADOR Y NAVEGACION  (barra superior, en todas las paginas)
+   - Campo de busqueda + selector de alcance ("Todo" o una categoria) +
+     boton Buscar.
+   - "Categorias" desplegable.
+   - Iconos: favoritos, carrito (con contador) y el menu de la cuenta.
+   - En movil hay un menu lateral y una barra inferior tipo app.
+
+3.3  FICHA DE PRODUCTO  (ventana emergente desde el catalogo)
+   - Fotos, especificaciones (procesador, RAM, grafica, pantalla), precio y
+     stock real.
+   - Selector de cantidad y aviso "Solo quedan N" cuando hay poco stock.
+   - Boton "Agregar al carrito".
+   - Resenas del producto: promedio de estrellas y comentarios. Si has
+     iniciado sesion, puedes dejar o editar tu resena.
+   - Si no hay imagen del producto se muestra una imagen generica; nunca
+     aparece una imagen rota.
+
+3.4  CHATBOT ASESOR  (boton flotante abajo a la derecha, en toda la tienda)
+   - En la primera visita muestra una burbuja invitando a usarlo.
+   - Le escribes que buscas, para que lo quieres y tu presupuesto.
+   - Responde con recomendaciones concretas: solo productos que existen, que
+     estan EN STOCK y que caben en tu presupuesto.
+   - Cada consulta queda registrada para que el equipo vea que pide la gente
+     (ver 4.10).
+
+3.5  CARRITO Y COMPRA  (carrito.html)
+   - Para comprar hay que iniciar sesion (si no, te manda al login y vuelve).
+   - Lista de productos con [-] cantidad [+], "Quitar" y "Vaciar carrito".
+   - Barra de progreso de envio gratis (gratis desde $10,000; si no, $199).
+   - Resumen: Subtotal, IVA 16%, Envio, Descuento por puntos, Total.
+   - Usar puntos del Club: campo para canjear puntos en multiplos de 100
+     (100 puntos = $10 de descuento). El total se recalcula al instante.
+   - Direccion de envio: escribir una nueva o elegir una guardada.
+   - Metodo de pago:
+        * una de tus tarjetas guardadas,
+        * "Usar otra tarjeta..." (pide numero, titular, MM/AA y CVV; puedes
+          marcar "guardar esta tarjeta"),
+        * Transferencia bancaria (SPEI),
+        * Pago en tienda.
+     Nota: es una demo, no se cobra nada real. Del numero de tarjeta solo se
+     guardan la marca y los ultimos 4 digitos; el CVV nunca se guarda.
+   - Al confirmar: se descuenta stock, se generan/canjean puntos y se va a la
+     pantalla de agradecimiento (gracias.html) con el detalle del pedido.
+
+3.6  MI CUENTA  (menu arriba a la derecha -> "Perfil")
+   Cada seccion es su propia pagina:
+
+   Resumen (perfil.html)
+      - Saludo, tarjeta virtual de socio (ver 7), nivel del Club con su
+        insignia, numero de compras, total gastado, favoritos.
+      - Ultimos 3 pedidos y accesos rapidos.
+
+   Mis pedidos (pedidos.html)
+      - Historial con estado (Pendiente, Confirmado, En preparacion, Enviado,
+        Entregado, Cancelado) y barra de progreso.
+      - "Ver detalle" abre productos, importes y guia de envio.
+
+   Club de puntos (recompensas.html)
+      - Saldo de puntos y su valor en dinero.
+      - Nivel actual con insignia y barra de avance al siguiente nivel.
+      - Tabla de los 4 niveles (Bronce, Plata, Oro, Platino) y sus reglas.
+      - "Movimientos recientes": cada suma o resta de puntos.
+
+   Favoritos (favoritos.html)
+      - Productos guardados con el corazon; se pueden quitar o abrir.
+
+   Mis resenas (resenas.html)
+      - Todas las resenas que has dejado; se pueden editar o borrar.
+
+   Direcciones (direcciones.html)
+      - Alta/edicion/borrado de direcciones; marcar una como predeterminada.
+
+   Metodos de pago (pagos.html)
+      - Tus tarjetas guardadas (marca, ultimos 4, titular, expiracion).
+      - "Agregar tarjeta", "Hacer predeterminada", "Eliminar".
+      - Recordatorio de que no se guarda el numero completo ni el CVV.
+
+   Soporte (soporte.html)  -> ver seccion 9.
+
+   Mis datos (datos.html)
+      - Nombre, telefono, empresa, ciudad, estado. Se guardan en la base.
+
+   Seguridad (seguridad.html)
+      - Cambio de contrasena (pide la actual).
+
+   Preferencias (preferencias.html)
+      - Notificaciones por correo (boletin, ofertas, estado de pedidos,
+        stock de favoritos).
+      - Apariencia: elegir el tema de color (ver 10).
+
+3.7  REGISTRO DE CUENTA  (registro.html)
+   - Pide nombre, correo, contrasena y CONFIRMAR contrasena (deben coincidir).
+   - Muestra un medidor de seguridad de la contrasena:
+        Muy debil / Debil (rojo) -> Regular (naranja) -> Buena -> Fuerte (verde).
+     Se calcula por longitud y por mezcla de mayusculas, minusculas, numeros y
+     simbolos. El minimo para registrarse son 6 caracteres.
+   - Al crear la cuenta se genera automaticamente el codigo de socio para la
+     tarjeta virtual (ver 7).
+
+3.8  MENSAJES EN PANTALLA
+   - La tienda no usa ventanas del navegador. Todo aviso sale como un "toast"
+     discreto (arriba) o como una ventana propia de confirmacion.
+
+
+===============================================================================
+ 4. LADO ADMIN  -  PANEL CRM  (http://localhost:3000/admin/login.html)
+===============================================================================
+
+La barra lateral esta agrupada en tres bloques: CRM, TIENDA y CUENTA.
+Cada pantalla tiene un encabezado con titulo y, si aplica, un boton de accion.
+
+4.1  DASHBOARD  (admin/dashboard.html)  [bloque CRM]
+   - Indicadores: total de clientes, clientes activos, interacciones del mes,
+     tickets de soporte activos, productos con stock critico.
+   - Grafica de clientes por etapa del CRM (dona).
+   - Grafica de interacciones por tipo (barras).
+   - Tabla "Clientes en riesgo": mas de 30 dias sin contacto registrado.
+   - Tabla "Productos mas vendidos".
+
+4.2  CLIENTES  (admin/clientes.html)  [CRM]
+   - Listado con buscador (nombre, correo, empresa) y filtro por etapa.
+   - Columnas: ID, nombre, correo, empresa, etapa CRM, estado.
+   - "Nuevo cliente": crea la cuenta con una contrasena temporal y abre su
+     ficha.
+   - Clic en una fila o en "Ver ficha" -> ficha del cliente.
+
+4.3  FICHA DE CLIENTE  (admin/cliente.html?id=...)  [CRM]
+   Es la pantalla central del CRM (equivale al "Detalle de cliente").
+   - Cabecera: nombre, etiqueta de etapa, estado, correo y empresa.
+   - Botones: "Editar cliente", "Cambiar etapa", "Nueva interaccion".
+   - Tarjetas: Compras, Valor total, Interacciones, Club (nivel con insignia
+     y puntos).
+   - Pestanas:
+        Informacion  : telefono, empresa, ciudad, registro, ultimo acceso,
+                       etapa CRM, estado, Club de puntos, codigo de socio.
+        Interacciones: linea de tiempo de todas las interacciones del cliente
+                       (llamada, correo, reunion, chat, soporte).
+        Evaluaciones : resenas que el cliente ha dejado en productos.
+   - "Cambiar etapa": Prospecto -> Activo -> Frecuente -> Inactivo. El paso a
+     "Activo" tambien ocurre solo al confirmarse la primera compra.
+   - "Nueva interaccion": registra una llamada/correo/reunion/chat con una
+     descripcion; queda ligada al vendedor que la registro.
+
+4.4  INTERACCIONES  (admin/interacciones.html)  [CRM]
+   - Todas las interacciones de todos los clientes, con filtros por texto,
+     tipo y rango de fechas.
+   - "Nueva interaccion": elige el cliente, el tipo y escribe la descripcion.
+   - La columna "Registro" indica quien la capturo.
+
+4.5  EVALUACIONES  (admin/evaluaciones.html)  [CRM]
+   - Todas las resenas de productos hechas por clientes.
+   - Indicadores: total, promedio de estrellas, resenas criticas (<= 2).
+   - Filtro por calificacion (5, 4+, 3+, criticas).
+
+4.6  SOPORTE  (admin/soporte.html)  [CRM]  -> ver seccion 9
+   - Cola de tickets con contadores (Abiertos, En proceso, Resueltos,
+     Cerrados) y filtros por estado y prioridad.
+   - Al abrir un ticket: hilo de mensajes, selector de estado y prioridad,
+     y campo para responder al cliente.
+
+4.7  REPORTES  (admin/reportes.html)  [CRM]
+   - Rango de fechas ("Del ... al ...") o "Todo el historico".
+   - KPIs: clientes totales, activos, interacciones del periodo, clientes sin
+     interaccion (30+ dias), nuevos clientes del periodo, ventas del periodo.
+   - Graficas: interacciones por tipo y clientes por etapa.
+
+4.8  PEDIDOS  (admin/pedidos.html)  [TIENDA]
+   - Listado con filtro por estado.
+   - Cambiar el estado de un pedido desde la misma fila.
+   - "Detalle": productos, subtotal, IVA, envio, descuento por puntos y total.
+
+4.9  INVENTARIO  (admin/productos.html)  [TIENDA]
+   - Catalogo completo: ID, producto, categoria, precio, stock, estado.
+   - "Nuevo producto" y edicion: datos, especificaciones tecnicas, precio,
+     stock, imagen (URL opcional; si se deja vacia se usa la generica).
+   - Reabastecer stock desde la ficha del producto.
+
+4.10 ANALITICA CHATBOT  (admin/chatbot.html)  [TIENDA]
+   - Que esta buscando la gente en el asesor: por uso, por rango de
+     presupuesto y ultimas consultas.
+   - Una consulta sin sugerencias es una oportunidad de reabastecer o de
+     ampliar catalogo.
+
+4.11 MI ACTIVIDAD  (admin/mi-actividad.html)  [CUENTA]
+   - Interacciones que TU (el usuario interno con la sesion activa) has
+     registrado.
+
+4.12 EQUIPO  (admin/usuarios.html)  [CUENTA]  -- solo ADMIN
+   - Usuarios internos con acceso al panel: administradores y vendedores.
+   - "Nuevo usuario": nombre, email, contrasena, telefono y rol.
+   - A un vendedor esta seccion no le aparece en el menu.
+
+4.13 CONFIGURACION  (admin/configuracion.html)  [CUENTA]
+   - Apariencia: elegir el tema de color de toda la plataforma.
+   - Etapas del CRM: recordatorio del embudo Prospecto/Activo/Frecuente/
+     Inactivo.
+   - Club de puntos: recordatorio de las reglas.
+   - Acerca de: version y stack.
+
+
+===============================================================================
+ 5. LADO VENDEDOR  -  QUE CAMBIA RESPECTO AL ADMIN
+===============================================================================
+
+El vendedor entra por la misma pantalla (/admin/login.html) y ve el mismo
+panel, con una sola diferencia visible: la seccion "Equipo" (4.12) NO aparece
+en su menu y no puede crear ni editar usuarios internos.
+
+Flujo tipico de un vendedor
+   1. Dashboard: revisar clientes en riesgo y tickets activos.
+   2. Clientes: buscar al cliente y abrir su ficha.
+   3. Registrar la interaccion (llamada/correo/reunion) con lo acordado.
+   4. Si hay una queja o duda formal, atender el ticket en Soporte.
+   5. Actualizar el estado del pedido en Pedidos cuando avance el envio.
+   6. Ajustar stock en Inventario si se recibe mercancia.
+
+
+===============================================================================
+ 6. CLUB DE PUNTOS  (sistema de recompensas)
+===============================================================================
+
+Valor
+   - 100 puntos = $10 de descuento (1 punto = $0.10).
+   - Se canjean SOLO en multiplos de 100, en el carrito, y nunca dejan el
+     subtotal en negativo.
+
+Como se ganan
+   - Al confirmar un pedido:  puntos = (subtotal / 20) * multiplicador del nivel
+     redondeado hacia abajo.
+
+Niveles (insignia de escudo con color propio y 1 a 4 puntos)
+   - Bronce  x1     desde $0         o  0 compras
+   - Plata   x1.15  desde $15,000    o  2 compras
+   - Oro     x1.3   desde $50,000    o  5 compras
+   - Platino x1.6   desde $120,000   o  10 compras
+   El nivel es el MAYOR entre el que dan las compras totales ($) y el que da
+   la frecuencia (numero de compras). Sube solo; no baja por inactividad.
+
+Donde se ve el nivel
+   - Tarjeta de socio y tarjeta "Nivel del Club" en Resumen.
+   - Pagina Club de puntos (barra de avance + tabla de niveles).
+   - Ficha del cliente en el panel (tarjeta "Club" y pestana Informacion).
+   - Pantalla de verificacion de socio (ver 7).
+
+Movimientos
+   - Cada compra (puntos ganados) y cada canje (puntos restados) se registran
+     con fecha, concepto y el pedido asociado. Se ven en "Movimientos
+     recientes".
+
+
+===============================================================================
+ 7. TARJETA VIRTUAL Y QR DE SOCIO
+===============================================================================
+
+Cada cliente tiene una tarjeta virtual en su Resumen (perfil.html) con:
+   - un numero de tarjeta (derivado de su ID, siempre el mismo),
+   - su nivel del Club con insignia,
+   - titular, socio desde, puntos y total de compras,
+   - un CODIGO QR y su codigo de socio en texto (formato  TTMX-XXXXXX ).
+
+Codigo de socio
+   - Se genera automaticamente al registrarse. Cuentas antiguas reciben uno
+     la primera vez que abren su Resumen.
+
+Uso en tienda fisica
+   - El QR apunta a:   http://<servidor>/socio.html?c=<codigo>
+   - Al escanearlo se abre "Verificacion de socio": una pantalla limpia para
+     el personal de tienda que muestra nombre, nivel, puntos disponibles,
+     su valor en dinero, socio desde y el codigo. Termina con "Socio
+     verificado".
+   - Esa pantalla es publica pero NO expone datos sensibles (ni correo, ni
+     telefono, ni pedidos).
+   - Endpoint que la alimenta:  GET /api/socio/:codigo
+
+
+===============================================================================
+ 8. METODOS DE PAGO
+===============================================================================
+
+Donde
+   - Cuenta -> "Metodos de pago" (pagos.html) para administrarlos.
+   - Tambien se puede agregar una tarjeta durante la compra, en el carrito.
+
+Que se guarda
+   - Tipo (tarjeta / transferencia / efectivo), marca (Visa, Mastercard,
+     American Express u "otra"), ultimos 4 digitos, titular y expiracion.
+   - NUNCA se guarda el numero completo ni el CVV. El CVV se pide y se valida
+     en el navegador, pero no se envia al servidor.
+
+Marca automatica
+   - Se deduce del numero:  empieza en 4 -> Visa;  51-55 o 22-27 -> Mastercard;
+     34 o 37 -> American Express;  cualquier otro -> "otra".
+
+En el pedido
+   - El pedido guarda un texto legible del metodo, por ejemplo
+     "Tarjeta Visa ****4821", "Transferencia SPEI" o "Pago en tienda".
+
+Aviso
+   - Es una demo educativa: no hay pasarela de pago ni cargos reales.
+
+
+===============================================================================
+ 9. TICKETS DE SOPORTE  (cliente <-> equipo)
+===============================================================================
+
+Lado cliente  (soporte.html, dentro de Mi cuenta)
+   - "Nuevo ticket": asunto, categoria, prioridad y descripcion.
+   - Cada ticket recibe un folio  TK-1001, TK-1002, ...
+   - Al abrir un ticket se ve el hilo de mensajes y un campo para responder.
+   - Si el ticket estaba "Resuelto" o "Cerrado" y el cliente escribe de
+     nuevo, se REABRE automaticamente.
+   - Desde el Centro de ayuda (ayuda.html) el boton de contacto lleva aqui
+     (o al login si no hay sesion).
+
+Lado equipo  (admin/soporte.html)
+   - Cola con contadores por estado y filtros por estado y prioridad.
+   - Al abrir un ticket: hilo completo, y selectores para cambiar ESTADO
+     (Abierto, En proceso, Resuelto, Cerrado) y PRIORIDAD (Baja, Media, Alta).
+   - "Enviar respuesta" agrega un mensaje del equipo; si el ticket estaba
+     "Abierto" pasa a "En proceso".
+
+Relacion con el CRM
+   - Cada ticket nuevo tambien se registra como interaccion de tipo
+     "soporte" en la ficha del cliente, para tener la historia completa en
+     un solo lugar.
+
+
+===============================================================================
+ 10. TEMAS / APARIENCIA
+===============================================================================
+
+Hay 4 temas de color: Indigo (por defecto), Esmeralda, Grafito y Claro.
+
+Donde se cambia
+   - Cliente: Preferencias -> "Apariencia", o el selector rapido en el pie
+     de pagina.
+   - Panel: Configuracion -> "Apariencia".
+
+Comportamiento
+   - La eleccion se guarda en el navegador (no en la base) y se aplica a
+     toda la plataforma, tienda y panel.
+   - Si se borran los datos del navegador, vuelve al tema Indigo.
+
+
+===============================================================================
+ 11. PREGUNTAS FRECUENTES / SOLUCION DE PROBLEMAS
+===============================================================================
+
+P: Al cargar db/database.sql salen muchos "NOTICE: ... does not exist,
+   skipping". Esta mal?
+R: No. El archivo empieza borrando tablas que en una base nueva todavia no
+   existen; PostgreSQL solo avisa que las salta. Si no hay lineas "ERROR",
+   la carga fue correcta. Verifica con:  SELECT COUNT(*) FROM productos;  (=20)
+
+P: npm start no dice nada sobre la base.
+R: Ahora si: la segunda linea de la consola indica "conectada" o el problema.
+   Si dice "SIN CONEXION", enciende PostgreSQL o corrige db.config.js.
+   Si dice "SIN TABLAS", vuelve a cargar db/database.sql.
+
+P: Inicio sesion (o creo cuenta) y me regresa al login una y otra vez.
+R: Era un error ya corregido: el token de admin viejo se enviaba tambien en
+   la tienda. Solucion para el usuario: recarga dura del navegador
+   (Ctrl+Shift+R). Si persiste, en DevTools -> Application -> Local Storage,
+   borra la clave "tt_admin_token".
+
+P: Las imagenes de producto no cargan / salen errores en la consola del
+   navegador.
+R: El catalogo ya no depende de imagenes externas. Si un producto no tiene
+   imagen se muestra una generica. Para poner imagenes reales, edita el
+   producto en el panel (Inventario) y pega una URL en el campo "Imagen".
+
+P: No puedo comprar, me pide iniciar sesion.
+R: Es correcto: la compra requiere una cuenta de cliente. Tras iniciar
+   sesion vuelve solo al carrito.
+
+P: Un cliente no puede entrar al panel.
+R: Es correcto. El panel solo acepta usuarios internos (admin/vendedor).
+
+P: Como doy de alta a un vendedor nuevo?
+R: Con una cuenta de admin: panel -> Equipo -> "Nuevo usuario", rol
+   "Vendedor". Definele una contrasena y comunicasela. El alta, baja y
+   edicion de usuarios internos se hace siempre desde esa seccion.
+
+P: Como reinicio los datos de ejemplo?
+R: Vuelve a ejecutar  psql -U postgres -d tiendatech -f db/database.sql .
+   Borra y recrea todo. (Cierra antes cualquier conexion abierta a la base,
+   como pgAdmin, o te dira que esta en uso.)
+
+
+===============================================================================
+ 12. NOTAS TECNICAS (referencia rapida)
+===============================================================================
+
+Estructura
+   tiendatech/
+     server.js            API Express (todas las rutas /api/...)
+     db.config.js         datos de conexion a PostgreSQL
+     db/database.sql      esquema + triggers + datos, re-ejecutable
+     public/              front estatico (HTML + CSS + JS, sin framework)
+       index.html, carrito.html, gracias.html, ayuda.html, login.html,
+       registro.html, socio.html
+       perfil.html, pedidos.html, recompensas.html, favoritos.html,
+       resenas.html, direcciones.html, pagos.html, soporte.html,
+       datos.html, seguridad.html, preferencias.html
+       js/  api.js theme.js icons.js toast.js layout.js chatbot.js
+            cuenta.js qrcode.min.js
+       css/ style.css
+       img/ producto.svg (imagen generica de producto)
+       admin/  login.html dashboard.html clientes.html cliente.html
+               interacciones.html evaluaciones.html soporte.html
+               reportes.html pedidos.html productos.html chatbot.html
+               mi-actividad.html usuarios.html configuracion.html
+               js/admin-layout.js
+
+Tablas principales
+   usuarios, proveedores, categorias, productos, clientes, interacciones,
+   metricas_clientes, carrito_items, pedidos, pedido_items,
+   movimientos_inventario, chatbot_consultas, direcciones, metodos_pago,
+   favoritos, movimientos_puntos, resenas, tickets, ticket_mensajes
+
+Autenticacion
+   - Cliente: token base64  cliente:<id>:<timestamp>  (localStorage tt_token).
+   - Interno: token base64  usuario:<id>:<timestamp>   (localStorage
+     tt_admin_token). El panel valida la sesion contra GET /api/admin/whoami.
+   - Middleware: requireCliente + mismoCliente en /api/clientes/:id ;
+     requireUsuario (+ requireAdmin) en /api/admin/... .
+
+Endpoints utiles
+   POST /api/auth/registro-cliente        alta de cliente (+ codigo de socio)
+   POST /api/auth/login-cliente           login tienda   (campo "correo")
+   POST /api/auth/login-usuario           login panel    (campo "email")
+   GET  /api/admin/whoami                 valida sesion interna
+   GET  /api/clientes/:id/recompensas     estado del Club (puntos, nivel...)
+   GET  /api/clientes/:id/metodos-pago    tarjetas guardadas
+   GET  /api/clientes/:id/tickets         tickets del cliente
+   GET  /api/socio/:codigo                verificacion publica de socio (QR)
+   GET  /api/admin/dashboard              KPIs del panel
+   GET  /api/admin/reportes?desde=&hasta= reportes por rango de fechas
+
+Reglas de negocio embebidas
+   - IVA 16%. Envio $199, gratis desde $10,000 de subtotal.
+   - Club: 100 puntos = $10; ganar = floor(subtotal/20 * multiplicador).
+   - Etapa "Activo" automatica al confirmarse la primera compra.
+   - Folio de ticket: TK-(1000 + id).
+
+===============================================================================
+ Fin del manual.
+===============================================================================

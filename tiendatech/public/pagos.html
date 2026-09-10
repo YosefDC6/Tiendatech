@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Métodos de pago · TiendaTech</title>
+<link rel="stylesheet" href="/css/style.css" />
+</head>
+<body>
+<div id="navbar-placeholder"></div>
+
+<div class="cuenta-shell">
+    <nav class="cuenta-nav" id="cuenta-nav"></nav>
+    <main class="cuenta-panel" id="cuenta-panel"><div class="empty-state">Cargando…</div></main>
+</div>
+
+<div id="footer-placeholder"></div>
+<div class="modal-overlay" id="modal-generico"><div class="modal" id="modal-generico-body"></div></div>
+
+<script src="/js/theme.js"></script>
+<script src="/js/api.js"></script>
+<script src="/js/icons.js"></script>
+<script src="/js/toast.js"></script>
+<script src="/js/layout.js"></script>
+<script src="/js/chatbot.js"></script>
+<script src="/js/cuenta.js"></script>
+<script>
+let CID = null;
+const MARCA_LABEL = { visa: 'Visa', mastercard: 'Mastercard', amex: 'American Express', otra: 'Tarjeta' };
+
+montarCuenta('pagos', async (panel, P) => {
+    CID = P.id;
+    await pintar(panel);
+});
+
+async function pintar(panel) {
+    const metodos = await api(`/clientes/${CID}/metodos-pago`);
+    panel.innerHTML = `
+        <div class="cuenta-head" style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px">
+            <div><h1>Métodos de pago</h1><p>Tus tarjetas guardadas para pagar más rápido al comprar.</p></div>
+            <button class="btn btn-primary btn-sm" onclick="formTarjeta()">Agregar tarjeta</button>
+        </div>
+
+        <div id="lista-metodos">
+        ${metodos.length === 0
+            ? '<div class="empty-state">Aún no tienes métodos de pago guardados.<br>Agrega una tarjeta para pagar con un clic.</div>'
+            : metodos.map((m) => `
+                <div class="pay-card ${m.predeterminada ? 'is-default' : ''}">
+                    <div class="pay-brand">${icon('card', 20)} <span>${MARCA_LABEL[m.marca] || 'Tarjeta'}</span></div>
+                    <div class="pay-num">•••• •••• •••• ${m.ultimos4 || '••••'}</div>
+                    <div class="pay-meta">
+                        ${m.titular ? m.titular + ' · ' : ''}Expira ${String(m.expira_mes).padStart(2, '0')}/${m.expira_anio}
+                        ${m.predeterminada ? '<span class="tag" style="color:var(--accent-light);border-color:var(--accent);margin-left:6px">Predeterminada</span>' : ''}
+                    </div>
+                    <div class="pay-actions">
+                        ${m.predeterminada ? '' : `<button class="btn btn-ghost btn-sm" onclick="hacerPredet(${m.id})">Hacer predeterminada</button>`}
+                        <button class="btn btn-ghost btn-sm" onclick="borrar(${m.id})">Eliminar</button>
+                    </div>
+                </div>
+            `).join('')}
+        </div>
+
+        <p style="font-size:.8rem;color:var(--text-muted);margin-top:16px">
+            Por tu seguridad solo guardamos la marca, los últimos 4 dígitos y la fecha de expiración.
+            El número completo y el código CVV nunca se almacenan.
+        </p>
+    `;
+}
+function refrescar() { pintar(document.getElementById('cuenta-panel')); }
+
+function formTarjeta() {
+    const anioActual = new Date().getFullYear();
+    const anios = Array.from({ length: 12 }, (_, i) => anioActual + i);
+    document.getElementById('modal-generico-body').innerHTML = `
+        <button class="modal-close" onclick="document.getElementById('modal-generico').classList.remove('open')">${icon('x', 20)}</button>
+        <h3>Agregar tarjeta</h3>
+        <div class="field"><label>Número de tarjeta</label>
+            <input id="t-num" inputmode="numeric" maxlength="23" placeholder="0000 0000 0000 0000" oninput="formatoNum(this)" />
+        </div>
+        <div class="field"><label>Nombre del titular</label><input id="t-titular" placeholder="Como aparece en la tarjeta" /></div>
+        <div class="field-row">
+            <div class="field"><label>Mes</label>
+                <select id="t-mes">${Array.from({ length: 12 }, (_, i) => `<option value="${i + 1}">${String(i + 1).padStart(2, '0')}</option>`).join('')}</select>
+            </div>
+            <div class="field"><label>Año</label>
+                <select id="t-anio">${anios.map((a) => `<option value="${a}">${a}</option>`).join('')}</select>
+            </div>
+            <div class="field"><label>CVV</label><input id="t-cvv" inputmode="numeric" maxlength="4" placeholder="123" /></div>
+        </div>
+        <label style="display:flex;align-items:center;gap:8px;margin-bottom:14px">
+            <input type="checkbox" id="t-predet" style="width:auto" checked /> Usar como predeterminada
+        </label>
+        <div id="t-error" style="color:var(--danger);font-size:.83rem;margin-bottom:10px;display:none"></div>
+        <button class="btn btn-primary" style="width:100%" onclick="guardarTarjeta()">Guardar tarjeta</button>
+        <p style="font-size:.78rem;color:var(--text-muted);text-align:center;margin:10px 0 0">Demo: no se procesa ningún cargo real.</p>
+    `;
+    document.getElementById('modal-generico').classList.add('open');
+}
+
+function formatoNum(el) {
+    const d = el.value.replace(/\D/g, '').slice(0, 19);
+    el.value = d.replace(/(.{4})/g, '$1 ').trim();
+}
+
+async function guardarTarjeta() {
+    const numero = document.getElementById('t-num').value.replace(/\s/g, '');
+    const titular = document.getElementById('t-titular').value.trim();
+    const cvv = document.getElementById('t-cvv').value.trim();
+    const err = document.getElementById('t-error');
+    err.style.display = 'none';
+
+    if (numero.length < 13 || numero.length > 19) { err.textContent = 'Revisa el número de tarjeta.'; err.style.display = 'block'; return; }
+    if (!titular) { err.textContent = 'Escribe el nombre del titular.'; err.style.display = 'block'; return; }
+    if (!/^\d{3,4}$/.test(cvv)) { err.textContent = 'El CVV debe tener 3 o 4 dígitos.'; err.style.display = 'block'; return; }
+
+    try {
+        // El CVV se valida aquí pero NO se envía ni se guarda.
+        await api(`/clientes/${CID}/metodos-pago`, {
+            method: 'POST',
+            body: {
+                tipo: 'tarjeta',
+                numero,
+                titular,
+                expira_mes: Number(document.getElementById('t-mes').value),
+                expira_anio: Number(document.getElementById('t-anio').value),
+                predeterminada: document.getElementById('t-predet').checked,
+            },
+        });
+        document.getElementById('modal-generico').classList.remove('open');
+        toast('Tarjeta guardada', 'ok');
+        refrescar();
+    } catch (e) { err.textContent = e.message; err.style.display = 'block'; }
+}
+
+async function hacerPredet(id) {
+    try { await api(`/clientes/${CID}/metodos-pago/${id}`, { method: 'PUT', body: { predeterminada: true } }); refrescar(); }
+    catch (e) { toast(e.message, 'error'); }
+}
+async function borrar(id) {
+    if (!(await confirmar('¿Eliminar esta tarjeta?', { okText: 'Eliminar', peligro: true }))) return;
+    try { await api(`/clientes/${CID}/metodos-pago/${id}`, { method: 'DELETE' }); toast('Tarjeta eliminada', 'ok'); refrescar(); }
+    catch (e) { toast(e.message, 'error'); }
+}
+</script>
+</body>
+</html>

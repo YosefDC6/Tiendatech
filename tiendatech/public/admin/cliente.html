@@ -59,7 +59,7 @@ async function cargar() {
             <div class="stat-card"><div class="stat-label">Compras</div><div class="stat-value">${m.total_compras || 0}</div></div>
             <div class="stat-card"><div class="stat-label">Valor total</div><div class="stat-value" style="font-size:1.3rem">${formatoMoneda(m.valor_total_compras || 0)}</div></div>
             <div class="stat-card"><div class="stat-label">Interacciones</div><div class="stat-value">${m.total_interacciones || 0}</div></div>
-            <div class="stat-card"><div class="stat-label">Club</div><div class="stat-value" style="font-size:1.1rem">${C.nivel.nombre}</div><div class="stat-sub">${C.puntos} pts</div></div>
+            <div class="stat-card"><div class="stat-label">Club</div><div class="stat-value" style="font-size:1.1rem;display:flex;align-items:center;gap:6px">${nivelBadge(C.nivel.clave, 20)} ${C.nivel.nombre}</div><div class="stat-sub">${C.puntos} pts</div></div>
         </div>
 
         <nav class="crm-tabs">
@@ -86,7 +86,8 @@ function tabInfo() {
                 <div class="cd-item"><span>Último acceso</span><strong>${C.ultimo_login ? formatoFecha(C.ultimo_login) : 'Nunca'}</strong></div>
                 <div class="cd-item"><span>Etapa CRM</span><strong>${C.etapa_crm}</strong></div>
                 <div class="cd-item"><span>Estado</span><strong style="text-transform:capitalize">${C.estado_cliente}</strong></div>
-                <div class="cd-item"><span>Club de puntos</span><strong>${C.nivel.nombre} · ${C.puntos} pts</strong></div>
+                <div class="cd-item"><span>Club de puntos</span><strong style="display:inline-flex;align-items:center;gap:6px">${nivelBadge(C.nivel.clave, 18)} ${C.nivel.nombre} · ${C.puntos} pts</strong></div>
+                <div class="cd-item"><span>Código de socio</span><strong class="mono">${C.codigo_socio || '—'}</strong></div>
             </div>
         </div>`;
 }

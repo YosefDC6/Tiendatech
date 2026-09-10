@@ -36,16 +36,20 @@ if (!cliente) irALogin();
 const ENVIO_GRATIS_DESDE = 10000;
 const COSTO_ENVIO = 199;
 let DIRECCIONES = [];
+let METODOS = [];
 let RECOMP = { puntos: 0, valor_punto: 0.10 };
 let SUBTOTAL = 0;
+const MARCA_LABEL = { visa: 'Visa', mastercard: 'Mastercard', amex: 'American Express', otra: 'Tarjeta' };
 
 async function cargarCarrito() {
-    const [items, dirs, rec] = await Promise.all([
+    const [items, dirs, rec, metodos] = await Promise.all([
         api(`/carrito/${cliente.id}`),
         api(`/clientes/${cliente.id}/direcciones`).catch(() => []),
         api(`/clientes/${cliente.id}/recompensas`).catch(() => ({ puntos: 0, valor_punto: 0.10 })),
+        api(`/clientes/${cliente.id}/metodos-pago`).catch(() => []),
     ]);
     DIRECCIONES = dirs;
+    METODOS = metodos;
     RECOMP = rec;
     const cont = document.getElementById('carrito-contenido');
     document.getElementById('btn-vaciar').hidden = items.length === 0;
@@ -132,11 +136,25 @@ async function cargarCarrito() {
             ${opcionesDir}
             <div class="field"><label>Dirección de envío</label><input type="text" id="direccion" placeholder="Calle, número, colonia, ciudad" /></div>
             <div class="field"><label>Método de pago</label>
-                <select id="metodo-pago">
-                    <option value="tarjeta">Tarjeta de crédito/débito</option>
-                    <option value="transferencia">Transferencia bancaria (SPEI)</option>
-                    <option value="efectivo">Pago en tienda</option>
+                <select id="metodo-pago" onchange="cambioMetodo()">
+                    ${METODOS.map((m) => `<option value="mp:${m.id}" ${m.predeterminada ? 'selected' : ''}>${MARCA_LABEL[m.marca] || 'Tarjeta'} ****${m.ultimos4}${m.predeterminada ? ' (predeterminada)' : ''}</option>`).join('')}
+                    <option value="nueva">＋ Usar otra tarjeta…</option>
+                    <option value="spei">Transferencia bancaria (SPEI)</option>
+                    <option value="tienda">Pago en tienda</option>
                 </select>
+            </div>
+            <div id="tarjeta-nueva" class="card-nueva" hidden>
+                <div class="field"><label>Número de tarjeta</label>
+                    <input id="tn-num" inputmode="numeric" maxlength="23" placeholder="0000 0000 0000 0000" oninput="fmtNum(this)" />
+                </div>
+                <div class="field"><label>Titular</label><input id="tn-titular" placeholder="Nombre en la tarjeta" /></div>
+                <div class="field-row">
+                    <div class="field"><label>Mes</label><select id="tn-mes">${Array.from({ length: 12 }, (_, i) => `<option value="${i + 1}">${String(i + 1).padStart(2, '0')}</option>`).join('')}</select></div>
+                    <div class="field"><label>Año</label><select id="tn-anio">${Array.from({ length: 12 }, (_, i) => { const a = new Date().getFullYear() + i; return `<option value="${a}">${a}</option>`; }).join('')}</select></div>
+                    <div class="field"><label>CVV</label><input id="tn-cvv" inputmode="numeric" maxlength="4" placeholder="123" /></div>
+                </div>
+                <label style="display:flex;align-items:center;gap:8px;font-size:.85rem"><input type="checkbox" id="tn-guardar" style="width:auto" checked /> Guardar esta tarjeta para la próxima vez</label>
+                <p style="font-size:.76rem;color:var(--text-muted);margin:8px 0 0">Demo: no se procesa ningún cargo real. Solo se guardan marca y últimos 4 dígitos.</p>
             </div>
             <button class="btn btn-primary btn-lg" style="width:100%" id="btn-comprar" onclick="confirmarCompra()">Confirmar pedido</button>
         </div>
@@ -144,6 +162,18 @@ async function cargarCarrito() {
     ENVIO_ACTUAL = envio; IVA_ACTUAL = impuestos;
     recalcular();
     usarDireccionGuardada();
+    cambioMetodo();
+}
+
+function fmtNum(el) {
+    const d = el.value.replace(/\D/g, '').slice(0, 19);
+    el.value = d.replace(/(.{4})/g, '$1 ').trim();
+}
+function cambioMetodo() {
+    const sel = document.getElementById('metodo-pago');
+    const box = document.getElementById('tarjeta-nueva');
+    if (!sel || !box) return;
+    box.hidden = sel.value !== 'nueva';
 }
 
 let ENVIO_ACTUAL = 0, IVA_ACTUAL = 0;
@@ -197,11 +227,46 @@ document.getElementById('btn-vaciar').addEventListener('click', async () => {
     } catch (e) { toast(e.message, 'error'); }
 });
 
+// Resuelve el <select> de método de pago a un texto para guardar en el pedido.
+// Si es tarjeta nueva la valida y (si se pidió) la guarda antes de comprar.
+async function resolverMetodoPago() {
+    const v = document.getElementById('metodo-pago').value;
+    if (v === 'spei') return 'Transferencia SPEI';
+    if (v === 'tienda') return 'Pago en tienda';
+    if (v.startsWith('mp:')) {
+        const m = METODOS.find((x) => String(x.id) === v.slice(3));
+        return m ? `Tarjeta ${MARCA_LABEL[m.marca] || ''} ****${m.ultimos4}`.replace(/\s+/g, ' ').trim() : 'Tarjeta';
+    }
+    // Tarjeta nueva
+    const numero = document.getElementById('tn-num').value.replace(/\s/g, '');
+    const titular = document.getElementById('tn-titular').value.trim();
+    const cvv = document.getElementById('tn-cvv').value.trim();
+    if (numero.length < 13 || numero.length > 19) { toast('Revisa el número de tarjeta', 'warn'); return null; }
+    if (!titular) { toast('Escribe el titular de la tarjeta', 'warn'); return null; }
+    if (!/^\d{3,4}$/.test(cvv)) { toast('El CVV debe tener 3 o 4 dígitos', 'warn'); return null; }
+
+    const mes = Number(document.getElementById('tn-mes').value);
+    const anio = Number(document.getElementById('tn-anio').value);
+    const marca = /^4/.test(numero) ? 'Visa' : /^(5[1-5]|2[2-7])/.test(numero) ? 'Mastercard' : /^3[47]/.test(numero) ? 'American Express' : '';
+    if (document.getElementById('tn-guardar').checked) {
+        try {
+            await api(`/clientes/${cliente.id}/metodos-pago`, {
+                method: 'POST',
+                body: { tipo: 'tarjeta', numero, titular, expira_mes: mes, expira_anio: anio, predeterminada: METODOS.length === 0 },
+            });
+        } catch (e) { /* si falla el guardado, igual se puede comprar */ }
+    }
+    return `Tarjeta ${marca} ****${numero.slice(-4)}`.replace(/\s+/g, ' ');
+}
+
 async function confirmarCompra() {
     const items = await api(`/carrito/${cliente.id}`);
     const direccion = document.getElementById('direccion').value.trim();
-    const metodo_pago = document.getElementById('metodo-pago').value;
     if (!direccion) { toast('Ingresa o elige una dirección de envío', 'warn'); return; }
+
+    const metodo_pago = await resolverMetodoPago();
+    if (!metodo_pago) return;
+
     const btn = document.getElementById('btn-comprar');
     btn.disabled = true; btn.textContent = 'Procesando…';
     try {

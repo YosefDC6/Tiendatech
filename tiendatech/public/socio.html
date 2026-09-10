@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Verificación de socio · TiendaTech</title>
+<link rel="stylesheet" href="/css/style.css" />
+</head>
+<body>
+<div class="socio-verify-wrap">
+    <a href="/index.html" class="socio-verify-brand">
+        <span class="brand-mark" data-ic="bolt" data-ic-size="16"></span> TiendaTech
+    </a>
+    <div id="contenido"><div class="empty-state">Verificando…</div></div>
+    <p class="socio-verify-foot">Pantalla para uso del personal en tienda. Datos de socio del Club TiendaTech.</p>
+</div>
+
+<script src="/js/theme.js"></script>
+<script src="/js/api.js"></script>
+<script src="/js/icons.js"></script>
+<script>
+const codigo = new URLSearchParams(location.search).get('c');
+const cont = document.getElementById('contenido');
+
+function fecha(d) {
+    if (!d) return '—';
+    return new Date(d).toLocaleDateString('es-MX', { month: 'long', year: 'numeric' });
+}
+
+(async () => {
+    if (!codigo) {
+        cont.innerHTML = '<div class="socio-verify-card err">Falta el código de socio en el enlace.</div>';
+        return;
+    }
+    try {
+        const s = await api('/socio/' + encodeURIComponent(codigo));
+        cont.innerHTML = `
+            <div class="socio-verify-card">
+                <div class="sv-badge">${nivelBadge(s.nivel.clave, 44)}</div>
+                <div class="sv-nivel">Nivel ${s.nivel.nombre}</div>
+                <div class="sv-nombre">${s.nombre}</div>
+                <div class="sv-grid">
+                    <div><span>Puntos disponibles</span><strong>${Number(s.puntos).toLocaleString('es-MX')}</strong></div>
+                    <div><span>Valen en tienda</span><strong>${formatoMoneda(s.valor_en_dinero)}</strong></div>
+                    <div><span>Socio desde</span><strong>${fecha(s.miembro_desde)}</strong></div>
+                    <div><span>Código</span><strong class="mono">${s.codigo}</strong></div>
+                </div>
+                <div class="sv-ok">${icon('check', 16)} Socio verificado</div>
+            </div>`;
+    } catch (e) {
+        cont.innerHTML = `<div class="socio-verify-card err">${icon('alert', 18)} No se encontró un socio con ese código.</div>`;
+    }
+})();
+</script>
+</body>
+</html>

@@ -25,6 +25,7 @@ DROP TABLE IF EXISTS tickets                 CASCADE;
 DROP TABLE IF EXISTS resenas                 CASCADE;
 DROP TABLE IF EXISTS movimientos_puntos      CASCADE;
 DROP TABLE IF EXISTS favoritos               CASCADE;
+DROP TABLE IF EXISTS metodos_pago            CASCADE;
 DROP TABLE IF EXISTS direcciones             CASCADE;
 DROP TABLE IF EXISTS chatbot_consultas       CASCADE;
 DROP TABLE IF EXISTS movimientos_inventario  CASCADE;
@@ -142,6 +143,8 @@ CREATE TABLE clientes (
     preferencias        JSONB NOT NULL DEFAULT '{}'::jsonb,
     -- saldo de puntos de recompensas (Club TiendaTech)
     puntos              INTEGER NOT NULL DEFAULT 0,
+    -- código del socio para el QR de la tarjeta virtual (tienda física)
+    codigo_socio        VARCHAR(14) UNIQUE,
     fecha_registro      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     ultimo_login        TIMESTAMP,
     fecha_actualizacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -200,7 +203,7 @@ CREATE TABLE pedidos (
     total                 NUMERIC(12,2) NOT NULL DEFAULT 0,
     estado                VARCHAR(20) DEFAULT 'pendiente'
                            CHECK (estado IN ('pendiente','confirmado','procesando','enviado','entregado','cancelado')),
-    metodo_pago           VARCHAR(30),
+    metodo_pago           VARCHAR(60),
     direccion_envio       VARCHAR(200),
     notas                 TEXT,
     numero_guia           VARCHAR(50),
@@ -268,6 +271,27 @@ CREATE TABLE direcciones (
 );
 
 CREATE INDEX idx_direcciones_cliente ON direcciones(cliente_id);
+
+-- ---------------------------------------------------------
+-- MÉTODOS DE PAGO DEL CLIENTE
+--   Nunca se guarda el número completo ni el CVV: solo la
+--   marca, los últimos 4 dígitos y la fecha de expiración.
+-- ---------------------------------------------------------
+CREATE TABLE metodos_pago (
+    id             SERIAL PRIMARY KEY,
+    cliente_id     INTEGER NOT NULL REFERENCES clientes(id) ON DELETE CASCADE,
+    tipo           VARCHAR(15) NOT NULL DEFAULT 'tarjeta'
+                    CHECK (tipo IN ('tarjeta','transferencia','efectivo')),
+    marca          VARCHAR(20),            -- visa / mastercard / amex / otra
+    ultimos4       VARCHAR(4),
+    titular        VARCHAR(120),
+    expira_mes     INTEGER CHECK (expira_mes BETWEEN 1 AND 12),
+    expira_anio    INTEGER,
+    predeterminada BOOLEAN DEFAULT FALSE,
+    fecha          TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_metodos_pago_cliente ON metodos_pago(cliente_id);
 
 -- ---------------------------------------------------------
 -- FAVORITOS / lista de deseos
@@ -387,8 +411,13 @@ CREATE TRIGGER trg_interaccion_metricas AFTER INSERT ON interacciones
 -- =========================================================
 CREATE OR REPLACE FUNCTION actualizar_metricas_compra() RETURNS TRIGGER AS $$
 BEGIN
+    -- Solo cuenta la PRIMERA vez que el pedido entra a un estado "pagado".
+    -- Así los cambios de estado posteriores (confirmado -> enviado -> ...)
+    -- no vuelven a sumar. Los pedidos creados por la tienda ya nacen
+    -- 'confirmado' y actualizan métricas desde server.js (INSERT no dispara
+    -- este trigger AFTER UPDATE).
     IF NEW.estado IN ('confirmado','procesando','enviado','entregado')
-       AND (OLD.estado IS DISTINCT FROM NEW.estado) THEN
+       AND (OLD.estado IS NULL OR OLD.estado NOT IN ('confirmado','procesando','enviado','entregado')) THEN
         INSERT INTO metricas_clientes (cliente_id, total_compras, valor_total_compras, ticket_promedio)
         VALUES (NEW.cliente_id, 1, NEW.total, NEW.total)
         ON CONFLICT (cliente_id) DO UPDATE
@@ -546,6 +575,18 @@ INSERT INTO direcciones (cliente_id, alias, destinatario, calle, ciudad, estado,
 INSERT INTO favoritos (cliente_id, producto_id) VALUES
  (1, 3), (1, 5), (1, 15), (2, 2), (2, 7);
 
+-- Código de socio (va en el QR de la tarjeta virtual)
+UPDATE clientes SET codigo_socio = 'TTMX-7K2M9Q' WHERE id = 1;
+UPDATE clientes SET codigo_socio = 'TTMX-4A1P8R' WHERE id = 2;
+UPDATE clientes SET codigo_socio = 'TTMX-3H6D2L' WHERE id = 3;
+UPDATE clientes SET codigo_socio = 'TTMX-9W5C7T' WHERE id = 4;
+
+-- Métodos de pago guardados (solo marca + últimos 4, nunca el número completo)
+INSERT INTO metodos_pago (cliente_id, tipo, marca, ultimos4, titular, expira_mes, expira_anio, predeterminada) VALUES
+ (1, 'tarjeta', 'visa',       '4821', 'Mariana Torres', 7, 2028, true),
+ (1, 'tarjeta', 'mastercard', '1099', 'Mariana Torres', 3, 2027, false),
+ (2, 'tarjeta', 'visa',       '5540', 'Diego Ramírez',  11, 2026, true);
+
 -- ---------------------------------------------------------
 -- PEDIDOS de ejemplo (historial real de compras).
 -- Se insertan con estado final; el trigger de métricas solo
@@ -555,17 +596,17 @@ INSERT INTO favoritos (cliente_id, producto_id) VALUES
 INSERT INTO pedidos
  (numero_orden, cliente_id, subtotal, impuestos, envio, descuento, total, estado, metodo_pago, direccion_envio,
   numero_guia, transportista, fecha_pedido, fecha_confirmacion, fecha_envio, fecha_entrega) VALUES
- ('ORD-24051', 1, 54999.00, 8799.84,   0.00,   0.00, 63798.84, 'entregado', 'tarjeta', 'Av. Universidad 123, Col. Centro, Aguascalientes',
+ ('ORD-24051', 1, 54999.00, 8799.84,   0.00,   0.00, 63798.84, 'entregado', 'Tarjeta Visa ****4821', 'Av. Universidad 123, Col. Centro, Aguascalientes',
    'TT240510042', 'Estafeta', CURRENT_TIMESTAMP - INTERVAL '58 days', CURRENT_TIMESTAMP - INTERVAL '58 days', CURRENT_TIMESTAMP - INTERVAL '57 days', CURRENT_TIMESTAMP - INTERVAL '55 days'),
- ('ORD-24188', 1, 27999.00, 4479.84,   0.00,   0.00, 32478.84, 'entregado', 'tarjeta', 'Av. Universidad 123, Col. Centro, Aguascalientes',
+ ('ORD-24188', 1, 27999.00, 4479.84,   0.00,   0.00, 32478.84, 'entregado', 'Tarjeta Visa ****4821', 'Av. Universidad 123, Col. Centro, Aguascalientes',
    'TT241880115', 'DHL', CURRENT_TIMESTAMP - INTERVAL '30 days', CURRENT_TIMESTAMP - INTERVAL '30 days', CURRENT_TIMESTAMP - INTERVAL '29 days', CURRENT_TIMESTAMP - INTERVAL '27 days'),
- ('ORD-24263', 1,  7897.00, 1263.52, 199.00, 440.00,  8919.52, 'entregado', 'tarjeta', 'Av. Universidad 123, Col. Centro, Aguascalientes',
+ ('ORD-24263', 1,  7897.00, 1263.52, 199.00, 440.00,  8919.52, 'entregado', 'Tarjeta Visa ****4821', 'Av. Universidad 123, Col. Centro, Aguascalientes',
    'TT242630087', 'Estafeta', CURRENT_TIMESTAMP - INTERVAL '8 days', CURRENT_TIMESTAMP - INTERVAL '8 days', CURRENT_TIMESTAMP - INTERVAL '7 days', CURRENT_TIMESTAMP - INTERVAL '5 days'),
- ('ORD-24120', 2, 27999.00, 4479.84,   0.00,   0.00, 32478.84, 'entregado', 'transferencia', 'Blvd. López Mateos 456, Col. Jardines, León',
+ ('ORD-24120', 2, 27999.00, 4479.84,   0.00,   0.00, 32478.84, 'entregado', 'Transferencia SPEI', 'Blvd. López Mateos 456, Col. Jardines, León',
    'TT241200231', 'DHL', CURRENT_TIMESTAMP - INTERVAL '15 days', CURRENT_TIMESTAMP - INTERVAL '15 days', CURRENT_TIMESTAMP - INTERVAL '14 days', CURRENT_TIMESTAMP - INTERVAL '12 days'),
- ('ORD-24310', 2, 34999.00, 5599.84,   0.00,   0.00, 40598.84, 'enviado', 'tarjeta', 'Blvd. López Mateos 456, Col. Jardines, León',
+ ('ORD-24310', 2, 34999.00, 5599.84,   0.00,   0.00, 40598.84, 'enviado', 'Tarjeta Visa ****5540', 'Blvd. López Mateos 456, Col. Jardines, León',
    'TT243100199', 'Estafeta', CURRENT_TIMESTAMP - INTERVAL '3 days', CURRENT_TIMESTAMP - INTERVAL '3 days', CURRENT_TIMESTAMP - INTERVAL '2 days', NULL),
- ('ORD-24225', 4,  9999.00, 1599.84, 199.00,   0.00, 11797.84, 'entregado', 'tarjeta', 'Zona Centro, Querétaro',
+ ('ORD-24225', 4,  9999.00, 1599.84, 199.00,   0.00, 11797.84, 'entregado', 'Tarjeta de crédito', 'Zona Centro, Querétaro',
    'TT242250164', 'Fedex', CURRENT_TIMESTAMP - INTERVAL '20 days', CURRENT_TIMESTAMP - INTERVAL '20 days', CURRENT_TIMESTAMP - INTERVAL '19 days', CURRENT_TIMESTAMP - INTERVAL '17 days');
 
 INSERT INTO pedido_items (pedido_id, producto_id, cantidad, precio_unitario, subtotal) VALUES

@@ -38,6 +38,11 @@
         keyboard: '<rect x="2" y="6" width="20" height="12" rx="2"/><line x1="6" y1="10" x2="6" y2="10"/><line x1="10" y1="10" x2="10" y2="10"/><line x1="14" y1="10" x2="14" y2="10"/><line x1="18" y1="10" x2="18" y2="10"/><line x1="8" y1="14" x2="16" y2="14"/>',
         star: '<polygon points="12 2 15 8.5 22 9.3 17 14 18.2 21 12 17.6 5.8 21 7 14 2 9.3 9 8.5 12 2"/>',
         clock: '<circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 16 14"/>',
+        qr: '<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><line x1="14" y1="14" x2="14" y2="17"/><line x1="17" y1="14" x2="21" y2="14"/><line x1="21" y1="17" x2="21" y2="21"/><line x1="14" y1="21" x2="17" y2="21"/><line x1="17" y1="17" x2="17" y2="17"/>',
+        wallet: '<path d="M3 7a2 2 0 0 1 2-2h13a1 1 0 0 1 1 1v2"/><rect x="3" y="7" width="18" height="12" rx="2"/><path d="M16 13h.01"/>',
+        plus: '<line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>',
+        download: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>',
+        medal: '<circle cx="12" cy="14" r="6"/><path d="M8.5 8.5 6 3h5l2 4M15.5 8.5 18 3h-5"/>',
     };
     // Íconos por nombre de categoría (para los tiles de la portada)
     const CAT = {
@@ -52,6 +57,26 @@
     window.iconCategoria = function (nombre, size = 22) {
         return window.icon(CAT[nombre] || 'grid', size);
     };
+
+    // Insignia del nivel del Club (Bronce/Plata/Oro/Platino): escudo con
+    // color propio y 1–4 puntos según el nivel.
+    const NIVEL_COLOR = { bronce: '#C0885A', plata: '#9AA7B8', oro: '#E0B23C', platino: '#6EA7CE' };
+    const NIVEL_PIPS  = { bronce: 1, plata: 2, oro: 3, platino: 4 };
+    window.nivelBadge = function (clave, size = 22) {
+        const col = NIVEL_COLOR[clave] || NIVEL_COLOR.bronce;
+        const pips = NIVEL_PIPS[clave] || 1;
+        let dots = '';
+        for (let i = 0; i < pips; i++) {
+            const x = 12 + (i - (pips - 1) / 2) * 3.1;
+            dots += `<circle cx="${x.toFixed(2)}" cy="14.5" r="1.15" fill="#fff"/>`;
+        }
+        return `<svg class="nivel-badge" width="${size}" height="${size}" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M12 2 4 5v6.2C4 16.4 12 21 12 21s8-4.6 8-9.8V5Z" fill="${col}"/>
+            <path d="M12 2 4 5v6.2C4 16.4 12 21 12 21s8-4.6 8-9.8V5Z" fill="none" stroke="rgba(0,0,0,.18)" stroke-width="1"/>
+            ${dots}
+        </svg>`;
+    };
+    window.NIVEL_COLOR = NIVEL_COLOR;
 
     // Rellena íconos en HTML estático: <span data-ic="cart" data-ic-size="18"></span>
     // El ícono se antepone al contenido existente del elemento.

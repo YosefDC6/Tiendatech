@@ -595,19 +595,70 @@ body.theme-light .topbar { background: var(--copper); }
 
 /* Tarjeta de socio (sobria) */
 .socio-card {
-    border-radius: 18px; padding: 22px 24px; margin-bottom: 24px; max-width: 440px; color: #fff;
+    border-radius: 18px; padding: 22px 24px; margin-bottom: 24px; max-width: 560px; color: #fff;
     background: linear-gradient(150deg, #2b3a6b, #1b2440);
     border: 1px solid rgba(255, 255, 255, .08);
     box-shadow: 0 20px 40px -22px rgba(0, 0, 0, .6);
+    display: flex; gap: 22px; align-items: stretch;
 }
-.socio-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 22px; }
+.socio-main { flex: 1; min-width: 0; }
+.socio-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 22px; gap: 10px; }
 .socio-brand { font-family: var(--font-head); font-weight: 700; letter-spacing: .01em; display: inline-flex; align-items: center; gap: 8px; }
 .socio-brand .ic { color: var(--accent-light); }
-.socio-tier { font-size: .68rem; font-weight: 700; text-transform: uppercase; letter-spacing: .09em; padding: 4px 10px; border-radius: 100px; background: rgba(255, 255, 255, .14); }
+.socio-tier { font-size: .68rem; font-weight: 700; text-transform: uppercase; letter-spacing: .09em; padding: 4px 10px; border-radius: 100px; background: rgba(255, 255, 255, .14); display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
 .socio-num { font-family: var(--font-mono); font-size: 1.15rem; letter-spacing: .16em; margin-bottom: 20px; }
 .socio-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 24px; }
 .socio-grid span { display: block; font-size: .62rem; text-transform: uppercase; letter-spacing: .1em; color: rgba(255, 255, 255, .6); margin-bottom: 2px; }
 .socio-grid strong { font-size: .92rem; font-weight: 600; }
+.socio-qr {
+    flex: 0 0 auto; display: flex; flex-direction: column; align-items: center; gap: 6px;
+    background: #fff; border-radius: 14px; padding: 12px; align-self: center;
+}
+.socio-qr .sq-code { width: 108px; height: 108px; }
+.socio-qr .sq-code svg { display: block; width: 100%; height: 100%; }
+.socio-qr .sq-label { font-size: .64rem; text-transform: uppercase; letter-spacing: .07em; color: #4a5568; }
+.socio-qr .sq-id { font-size: .68rem; color: #1a2233; letter-spacing: .04em; }
+.nivel-badge { vertical-align: -3px; }
+@media (max-width: 560px) {
+    .socio-card { flex-direction: column; align-items: stretch; }
+    .socio-qr { align-self: flex-start; }
+}
+
+/* Verificación de socio (socio.html — pantalla para tienda física) */
+.socio-verify-wrap { max-width: 420px; margin: 0 auto; padding: 40px 20px 60px; text-align: center; }
+.socio-verify-brand { display: inline-flex; align-items: center; gap: 8px; font-family: var(--font-head); font-weight: 700; font-size: 1.1rem; color: var(--text); margin-bottom: 24px; }
+.socio-verify-brand .brand-mark { color: var(--accent); }
+.socio-verify-card {
+    background: var(--bg-panel); border: 1px solid var(--line); border-radius: var(--radius);
+    padding: 28px 24px; box-shadow: var(--shadow-sm); text-align: center;
+}
+.socio-verify-card.err { color: var(--danger); font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 8px; }
+.sv-badge { margin-bottom: 8px; }
+.sv-nivel { font-size: .74rem; text-transform: uppercase; letter-spacing: .09em; color: var(--text-muted); font-weight: 700; }
+.sv-nombre { font-size: 1.4rem; font-weight: 700; margin: 4px 0 18px; }
+.sv-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; text-align: left; margin-bottom: 18px; }
+.sv-grid span { display: block; font-size: .64rem; text-transform: uppercase; letter-spacing: .08em; color: var(--text-muted); }
+.sv-grid strong { font-size: 1rem; }
+.sv-ok { display: inline-flex; align-items: center; gap: 6px; color: var(--success); font-weight: 600; font-size: .9rem; }
+.socio-verify-foot { font-size: .76rem; color: var(--text-muted); margin-top: 18px; }
+
+/* Medidor de seguridad de contraseña (registro) */
+.pass-meter { display: flex; align-items: center; gap: 10px; margin-top: 8px; }
+.pm-track { flex: 1; height: 6px; border-radius: 100px; background: var(--bg-panel-2); overflow: hidden; }
+.pm-track span { display: block; height: 100%; width: 0; border-radius: 100px; transition: width .2s, background .2s; }
+.pm-label { font-size: .76rem; font-weight: 600; white-space: nowrap; }
+.pass-match { font-size: .82rem; margin-bottom: 12px; }
+
+/* Métodos de pago (pagos.html + carrito) */
+.pay-card { border: 1px solid var(--line); border-radius: var(--radius); padding: 16px 18px; margin-bottom: 12px; }
+.pay-card.is-default { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.pay-brand { display: inline-flex; align-items: center; gap: 8px; font-weight: 600; font-size: .92rem; }
+.pay-brand .ic { color: var(--accent); }
+.pay-num { font-family: var(--font-mono); letter-spacing: .14em; font-size: 1rem; margin: 8px 0 4px; }
+.pay-meta { font-size: .82rem; color: var(--text-muted); }
+.pay-actions { margin-top: 10px; display: flex; gap: 8px; flex-wrap: wrap; }
+.card-nueva { border: 1px dashed var(--line); border-radius: var(--radius); padding: 14px 16px; margin: -6px 0 14px; background: var(--bg-panel-2); }
+.nivel-item .ni-head { display: flex; align-items: center; gap: 7px; }
 
 /* Tarjetas del centro de ayuda */
 .help-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 22px 0; }
@@ -769,7 +820,7 @@ body.theme-light .topbar { background: var(--copper); }
 .club-card .cc-label { display: block; font-size: .72rem; text-transform: uppercase; letter-spacing: .08em; opacity: .85; }
 .club-card .cc-pts { display: block; font-family: var(--font-mono); font-size: 2.4rem; font-weight: 700; line-height: 1.1; }
 .club-card .cc-val { font-size: .85rem; opacity: .9; }
-.club-card .cc-nivel { font-weight: 700; text-transform: uppercase; letter-spacing: .06em; font-size: .78rem; padding: 6px 14px; border-radius: 100px; background: rgba(255, 255, 255, .2); }
+.club-card .cc-nivel { font-weight: 700; text-transform: uppercase; letter-spacing: .06em; font-size: .78rem; padding: 6px 14px; border-radius: 100px; background: rgba(255, 255, 255, .2); display: inline-flex; align-items: center; gap: 7px; }
 .club-bar { height: 8px; border-radius: 100px; background: var(--bg-panel-2); overflow: hidden; }
 .club-bar > span { display: block; height: 100%; background: var(--accent); transition: width .35s ease; }
 
@@ -789,6 +840,15 @@ body.theme-light .topbar { background: var(--copper); }
 .stars-input .star { cursor: pointer; }
 .stars-input .star.on .ic, .stars-input .star:hover .ic { fill: var(--warning); }
 .stars-input .star.on, .stars-input .star:hover { color: var(--warning); }
+
+/* Reseñas dentro del detalle de un pedido */
+.pedido-resenas { margin-top: 16px; border-top: 1px solid var(--line); padding-top: 14px; }
+.pedido-resenas h4 { margin: 0 0 10px; font-size: .92rem; }
+.pr-item { padding: 10px 0; border-bottom: 1px dashed var(--line); }
+.pr-item:last-child { border-bottom: none; }
+.pr-nombre { font-weight: 600; font-size: .9rem; margin-bottom: 4px; }
+.pr-cur { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: .85rem; color: var(--text-muted); }
+.pr-item textarea { font-size: .86rem; }
 
 /* =========================================================
    TICKETS DE SOPORTE

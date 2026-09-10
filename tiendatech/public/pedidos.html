@@ -27,6 +27,15 @@
 const FLUJO = ['confirmado', 'procesando', 'enviado', 'entregado'];
 const CANCELABLES = ['pendiente', 'confirmado'];
 let CID = null;
+let RESN = {}; // producto_id -> calificacion en curso
+
+function estrellas(n, editable, orderId, pid) {
+    let s = '';
+    for (let i = 1; i <= 5; i++) {
+        s += `<span class="star ${i <= n ? 'on' : ''}" ${editable ? `data-val="${i}" onclick="setResn(${orderId},${pid},${i})"` : ''}>${icon('star', 15)}</span>`;
+    }
+    return `<span class="stars ${editable ? 'stars-input' : ''}" ${editable ? `id="st-${orderId}-${pid}"` : ''}>${s}</span>`;
+}
 
 montarCuenta('pedidos', async (panel, P) => {
     CID = P.id;
@@ -54,18 +63,30 @@ montarCuenta('pedidos', async (panel, P) => {
             ${track}
             <div style="display:flex;gap:8px;margin-top:12px">
                 <button class="btn btn-outline btn-sm" onclick="detallePedido(${p.id})">Ver detalle</button>
+                ${p.estado === 'entregado' ? `<button class="btn btn-primary btn-sm" onclick="detallePedido(${p.id}, true)">Dejar reseña</button>` : ''}
                 ${CANCELABLES.includes(p.estado) ? `<button class="btn btn-ghost btn-sm" onclick="cancelarPedido(${p.id})">Cancelar</button>` : ''}
             </div>
             <div id="det-${p.id}"></div>
         </div>`;
     }).join('');
+
+    // Enlace directo a un pedido:  /pedidos.html#p123  abre su detalle
+    const h = location.hash.match(/^#p(\d+)$/);
+    if (h && document.getElementById('det-' + h[1])) detallePedido(Number(h[1]), true);
 });
 
-async function detallePedido(id) {
+async function detallePedido(id, irAResenas) {
     const cont = document.getElementById('det-' + id);
-    if (cont.dataset.open) { cont.innerHTML = ''; delete cont.dataset.open; return; }
-    const d = await api(`/pedidos/${id}/detalle`);
+    if (cont.dataset.open && !irAResenas) { cont.innerHTML = ''; delete cont.dataset.open; return; }
+    const [d, mias] = await Promise.all([
+        api(`/pedidos/${id}/detalle`),
+        api(`/clientes/${CID}/resenas`).catch(() => []),
+    ]);
     cont.dataset.open = '1';
+    const rev = {};
+    mias.forEach((r) => { rev[r.producto_id] = r; });
+    const entregado = d.estado === 'entregado';
+
     cont.innerHTML = `
         <div class="table-wrap" style="margin-top:12px">
             <table>
@@ -74,7 +95,71 @@ async function detallePedido(id) {
             </table>
         </div>
         <div style="font-size:.84rem;color:var(--text-muted);margin-top:8px">Envío a: ${d.direccion_envio || '—'} · Pago: ${d.metodo_pago || '—'}</div>
+        <div class="pedido-resenas" id="pr-wrap-${id}">
+            <h4>Tu opinión sobre estos productos</h4>
+            ${d.items.map((i) => bloqueResena(i, rev[i.producto_id], id, entregado)).join('')}
+        </div>
     `;
+    if (irAResenas) cont.querySelector('.pedido-resenas').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function bloqueResena(item, ex, orderId, entregado) {
+    const pid = item.producto_id;
+    if (ex) {
+        return `<div class="pr-item" id="pr-${orderId}-${pid}">
+            <div class="pr-nombre">${item.nombre}</div>
+            <div class="pr-cur">${estrellas(ex.calificacion)}${ex.comentario ? ' · ' + ex.comentario.replace(/</g, '&lt;') : ''}
+                <button class="btn btn-ghost btn-sm" onclick="editarResn(${orderId}, ${pid})">Editar</button></div>
+        </div>`;
+    }
+    if (!entregado) {
+        return `<div class="pr-item"><div class="pr-nombre">${item.nombre}</div>
+            <div style="font-size:.8rem;color:var(--text-muted)">Podrás reseñarlo cuando el pedido esté entregado.</div></div>`;
+    }
+    return formResn(item, orderId, 0, '');
+}
+
+function formResn(item, orderId, val, com) {
+    const pid = item.producto_id;
+    RESN[pid] = val;
+    return `<div class="pr-item" id="pr-${orderId}-${pid}">
+        <div class="pr-nombre">${item.nombre}</div>
+        ${estrellas(val, true, orderId, pid)}
+        <textarea id="rc-${orderId}-${pid}" rows="2" placeholder="¿Qué te pareció? (opcional)" style="margin-top:6px;width:100%">${(com || '').replace(/</g, '&lt;')}</textarea>
+        <button class="btn btn-primary btn-sm" style="margin-top:6px" onclick="guardarResn(${orderId}, ${pid})">Publicar reseña</button>
+    </div>`;
+}
+
+function setResn(orderId, pid, v) {
+    RESN[pid] = v;
+    document.querySelectorAll(`#st-${orderId}-${pid} .star`).forEach((el) =>
+        el.classList.toggle('on', Number(el.dataset.val) <= v));
+}
+
+async function editarResn(orderId, pid) {
+    const lista = await api(`/clientes/${CID}/resenas`).catch(() => []);
+    const ex = lista.find((r) => r.producto_id === pid) || { calificacion: 0, comentario: '' };
+    const el = document.getElementById(`pr-${orderId}-${pid}`);
+    const nombre = el.querySelector('.pr-nombre').textContent;
+    el.outerHTML = formResn({ producto_id: pid, nombre }, orderId, ex.calificacion, ex.comentario || '');
+    setResn(orderId, pid, ex.calificacion);
+}
+
+async function guardarResn(orderId, pid) {
+    const val = RESN[pid] || 0;
+    if (val < 1) { toast('Elige una calificación de 1 a 5 estrellas', 'warn'); return; }
+    const com = document.getElementById(`rc-${orderId}-${pid}`).value.trim();
+    try {
+        await api(`/clientes/${CID}/resenas`, { method: 'POST', body: { producto_id: pid, calificacion: val, comentario: com } });
+        toast('¡Gracias por tu reseña!', 'ok');
+        const el = document.getElementById(`pr-${orderId}-${pid}`);
+        const nombre = el.querySelector('.pr-nombre').textContent;
+        el.outerHTML = `<div class="pr-item" id="pr-${orderId}-${pid}">
+            <div class="pr-nombre">${nombre}</div>
+            <div class="pr-cur">${estrellas(val)}${com ? ' · ' + com.replace(/</g, '&lt;') : ''}
+                <button class="btn btn-ghost btn-sm" onclick="editarResn(${orderId}, ${pid})">Editar</button></div>
+        </div>`;
+    } catch (e) { toast(e.message, 'error'); }
 }
 
 async function cancelarPedido(id) {

@@ -117,6 +117,24 @@ function nivelRecompensas(valorTotal = 0, totalCompras = 0) {
     const siguiente = NIVELES[idx + 1] || null;
     return { indice: idx, actual, siguiente };
 }
+
+// Código único de socio para el QR de la tarjeta virtual (formato TTMX-XXXXXX).
+function generarCodigoSocio() {
+    const abc = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // sin I/O/0/1 para que sea legible
+    let s = '';
+    for (let i = 0; i < 6; i++) s += abc[Math.floor(Math.random() * abc.length)];
+    return 'TTMX-' + s;
+}
+
+// Detecta la marca de una tarjeta por su número (solo para guardar la marca;
+// el número completo y el CVV NUNCA se almacenan).
+function marcaTarjeta(numero) {
+    const n = String(numero || '').replace(/\D/g, '');
+    if (/^4/.test(n)) return 'visa';
+    if (/^(5[1-5]|2[2-7])/.test(n)) return 'mastercard';
+    if (/^3[47]/.test(n)) return 'amex';
+    return 'otra';
+}
 async function estadoRecompensas(clienteId) {
     const c = await pool.query('SELECT puntos FROM clientes WHERE id = $1', [clienteId]);
     if (c.rows.length === 0) return null;
@@ -181,11 +199,20 @@ app.post('/api/auth/registro-cliente', asyncRoute(async (req, res) => {
     if (existe.rows.length > 0) return res.status(400).json({ message: 'Este correo ya está registrado' });
 
     const hash = await bcrypt.hash(password, 10);
+
+    // Código de socio único (reintenta si choca con uno existente)
+    let codigoSocio;
+    for (let intento = 0; intento < 5; intento++) {
+        codigoSocio = generarCodigoSocio();
+        const dup = await pool.query('SELECT 1 FROM clientes WHERE codigo_socio = $1', [codigoSocio]);
+        if (dup.rows.length === 0) break;
+    }
+
     const result = await pool.query(
-        `INSERT INTO clientes (nombre, correo, password, telefono, empresa, ciudad, estado, direccion, codigo_postal, estado_cliente, etapa_crm)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'activo','Prospecto')
-         RETURNING id, nombre, correo, telefono, empresa, ciudad, estado, etapa_crm, fecha_registro`,
-        [nombre, correo, hash, telefono, empresa, ciudad, estado, direccion, codigo_postal]
+        `INSERT INTO clientes (nombre, correo, password, telefono, empresa, ciudad, estado, direccion, codigo_postal, codigo_socio, estado_cliente, etapa_crm)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'activo','Prospecto')
+         RETURNING id, nombre, correo, telefono, empresa, ciudad, estado, codigo_socio, etapa_crm, fecha_registro`,
+        [nombre, correo, hash, telefono, empresa, ciudad, estado, direccion, codigo_postal, codigoSocio]
     );
     const cliente = result.rows[0];
     await pool.query('INSERT INTO metricas_clientes (cliente_id) VALUES ($1)', [cliente.id]);
@@ -486,6 +513,21 @@ app.post('/api/pedidos', requireCliente, asyncRoute(async (req, res) => {
             );
         }
 
+        // ---- Métricas del cliente: el pedido nace 'confirmado' vía INSERT,
+        //      así que el trigger AFTER UPDATE no corre. Se actualiza aquí
+        //      para que suba el nivel del Club, el total gastado y el conteo
+        //      de compras. (Se cuenta por 'total', igual que el trigger.)
+        await client.query(
+            `INSERT INTO metricas_clientes (cliente_id, total_compras, valor_total_compras, ticket_promedio)
+             VALUES ($1, 1, $2, $2)
+             ON CONFLICT (cliente_id) DO UPDATE SET
+                 total_compras       = metricas_clientes.total_compras + 1,
+                 valor_total_compras = metricas_clientes.valor_total_compras + $2,
+                 ticket_promedio     = (metricas_clientes.valor_total_compras + $2)
+                                       / (metricas_clientes.total_compras + 1)`,
+            [cliente_id, total]
+        );
+
         await client.query('DELETE FROM carrito_items WHERE cliente_id = $1', [cliente_id]);
         await client.query('COMMIT');
 
@@ -533,12 +575,25 @@ app.use('/api/clientes/:id', requireCliente, mismoCliente);
 app.get('/api/clientes/:id', asyncRoute(async (req, res) => {
     const result = await pool.query(
         `SELECT id, nombre, correo, telefono, empresa, direccion, ciudad, estado, codigo_postal,
-                etapa_crm, preferencias, puntos, fecha_registro
+                etapa_crm, preferencias, puntos, codigo_socio, fecha_registro
          FROM clientes WHERE id = $1`,
         [req.params.id]
     );
     if (result.rows.length === 0) return res.status(404).json({ message: 'Cliente no encontrado' });
-    res.json(result.rows[0]);
+
+    const cliente = result.rows[0];
+    // Backfill: cuentas creadas antes de existir el código de socio.
+    if (!cliente.codigo_socio) {
+        for (let i = 0; i < 5; i++) {
+            const cs = generarCodigoSocio();
+            try {
+                await pool.query('UPDATE clientes SET codigo_socio = $1 WHERE id = $2', [cs, cliente.id]);
+                cliente.codigo_socio = cs;
+                break;
+            } catch (e) { /* choque de único: reintenta */ }
+        }
+    }
+    res.json(cliente);
 }));
 
 // Estado del Club (puntos, nivel, progreso, historial)
@@ -781,6 +836,112 @@ app.delete('/api/clientes/:id/direcciones/:dirId', asyncRoute(async (req, res) =
 }));
 
 // =========================================================
+// MÉTODOS DE PAGO DEL CLIENTE
+//   Solo se guarda marca + últimos 4 + expiración. El número
+//   completo y el CVV nunca tocan la base de datos.
+// =========================================================
+app.get('/api/clientes/:id/metodos-pago', asyncRoute(async (req, res) => {
+    const result = await pool.query(
+        'SELECT id, tipo, marca, ultimos4, titular, expira_mes, expira_anio, predeterminada, fecha FROM metodos_pago WHERE cliente_id = $1 ORDER BY predeterminada DESC, id ASC',
+        [req.params.id]
+    );
+    res.json(result.rows);
+}));
+
+app.post('/api/clientes/:id/metodos-pago', asyncRoute(async (req, res) => {
+    const { tipo = 'tarjeta', numero, titular, expira_mes, expira_anio, predeterminada } = req.body;
+    let marca = null, ultimos4 = null, mes = null, anio = null;
+
+    if (tipo === 'tarjeta') {
+        const digits = String(numero || '').replace(/\D/g, '');
+        if (digits.length < 13 || digits.length > 19) {
+            return res.status(400).json({ message: 'El número de tarjeta no es válido' });
+        }
+        if (!titular) return res.status(400).json({ message: 'Falta el nombre del titular' });
+        mes = Number(expira_mes); anio = Number(expira_anio);
+        if (!(mes >= 1 && mes <= 12) || !(anio >= 2024 && anio <= 2100)) {
+            return res.status(400).json({ message: 'La fecha de expiración no es válida' });
+        }
+        marca = marcaTarjeta(digits);
+        ultimos4 = digits.slice(-4);
+    }
+
+    const client = await pool.connect();
+    try {
+        await client.query('BEGIN');
+        const count = await client.query('SELECT COUNT(*)::int AS n FROM metodos_pago WHERE cliente_id = $1', [req.params.id]);
+        const esPrimero = count.rows[0].n === 0;
+        if (predeterminada || esPrimero) {
+            await client.query('UPDATE metodos_pago SET predeterminada = false WHERE cliente_id = $1', [req.params.id]);
+        }
+        const result = await client.query(
+            `INSERT INTO metodos_pago (cliente_id, tipo, marca, ultimos4, titular, expira_mes, expira_anio, predeterminada)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
+            [req.params.id, tipo, marca, ultimos4, titular || null, mes, anio, predeterminada || esPrimero]
+        );
+        await client.query('COMMIT');
+        res.status(201).json({ message: 'Método de pago guardado', metodo: result.rows[0] });
+    } catch (e) {
+        await client.query('ROLLBACK');
+        throw e;
+    } finally {
+        client.release();
+    }
+}));
+
+app.put('/api/clientes/:id/metodos-pago/:mpId', asyncRoute(async (req, res) => {
+    const { titular, predeterminada } = req.body;
+    const client = await pool.connect();
+    try {
+        await client.query('BEGIN');
+        if (predeterminada) {
+            await client.query('UPDATE metodos_pago SET predeterminada = false WHERE cliente_id = $1', [req.params.id]);
+        }
+        const result = await client.query(
+            `UPDATE metodos_pago SET titular = COALESCE($1, titular), predeterminada = COALESCE($2, predeterminada)
+             WHERE id = $3 AND cliente_id = $4 RETURNING *`,
+            [titular ?? null, predeterminada ?? null, req.params.mpId, req.params.id]
+        );
+        if (result.rows.length === 0) { await client.query('ROLLBACK'); return res.status(404).json({ message: 'Método de pago no encontrado' }); }
+        await client.query('COMMIT');
+        res.json({ message: 'Método de pago actualizado', metodo: result.rows[0] });
+    } catch (e) {
+        await client.query('ROLLBACK');
+        throw e;
+    } finally {
+        client.release();
+    }
+}));
+
+app.delete('/api/clientes/:id/metodos-pago/:mpId', asyncRoute(async (req, res) => {
+    await pool.query('DELETE FROM metodos_pago WHERE id = $1 AND cliente_id = $2', [req.params.mpId, req.params.id]);
+    res.json({ message: 'Método de pago eliminado' });
+}));
+
+// =========================================================
+// VERIFICACIÓN DE SOCIO (público) — lo usa el QR de la
+// tarjeta virtual para que en tienda física puedan validar
+// al socio y ver su nivel y puntos. No expone datos sensibles.
+// =========================================================
+app.get('/api/socio/:codigo', asyncRoute(async (req, res) => {
+    const c = await pool.query(
+        `SELECT id, nombre, etapa_crm, fecha_registro FROM clientes
+         WHERE codigo_socio = $1 AND estado_cliente = 'activo'`,
+        [req.params.codigo]
+    );
+    if (c.rows.length === 0) return res.status(404).json({ message: 'Socio no encontrado' });
+    const rec = await estadoRecompensas(c.rows[0].id);
+    res.json({
+        codigo: req.params.codigo,
+        nombre: c.rows[0].nombre,
+        miembro_desde: c.rows[0].fecha_registro,
+        nivel: rec.nivel,
+        puntos: rec.puntos,
+        valor_en_dinero: rec.valor_en_dinero,
+    });
+}));
+
+// =========================================================
 // FAVORITOS DEL CLIENTE
 // =========================================================
 
@@ -882,7 +1043,7 @@ app.get('/api/admin/clientes', asyncRoute(async (req, res) => {
 app.get('/api/admin/clientes/:id', asyncRoute(async (req, res) => {
     const cliente = await pool.query(
         `SELECT id, nombre, correo, telefono, empresa, direccion, ciudad, estado, codigo_postal,
-                estado_cliente, etapa_crm, puntos, fecha_registro, ultimo_login
+                estado_cliente, etapa_crm, puntos, codigo_socio, fecha_registro, ultimo_login
          FROM clientes WHERE id = $1`, [req.params.id]);
     if (cliente.rows.length === 0) return res.status(404).json({ message: 'Cliente no encontrado' });
     const metricas = await pool.query('SELECT * FROM metricas_clientes WHERE cliente_id = $1', [req.params.id]);

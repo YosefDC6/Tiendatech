@@ -24,8 +24,6 @@
 <script src="/js/chatbot.js"></script>
 <script src="/js/cuenta.js"></script>
 <script>
-const NIVEL_ICO = { bronce: 'star', plata: 'star', oro: 'star', platino: 'star' };
-
 montarCuenta('recompensas', async (panel, P) => {
     const r = await api(`/clientes/${P.id}/recompensas`);
     const sig = r.siguiente_nivel;
@@ -42,7 +40,7 @@ montarCuenta('recompensas', async (panel, P) => {
                 <span class="cc-pts">${r.puntos.toLocaleString('es-MX')}</span>
                 <span class="cc-val">equivalen a ${formatoMoneda(r.valor_en_dinero)} en la tienda</span>
             </div>
-            <span class="cc-nivel">${r.nivel.nombre}</span>
+            <span class="cc-nivel">${nivelBadge(r.nivel.clave, 20)} ${r.nivel.nombre}</span>
         </div>
 
         ${sig ? `
@@ -63,7 +61,7 @@ montarCuenta('recompensas', async (panel, P) => {
         <div class="niveles-grid">
             ${r.niveles.map((n) => `
                 <div class="nivel-item ${n.clave === r.nivel.clave ? 'is-actual' : ''}">
-                    <strong>${n.nombre}</strong>
+                    <div class="ni-head">${nivelBadge(n.clave, 22)} <strong>${n.nombre}</strong></div>
                     <span>x${n.multiplicador} puntos</span>
                     <span class="ni-req">Desde ${formatoMoneda(n.minGasto)} ó ${n.minCompras} compras</span>
                 </div>

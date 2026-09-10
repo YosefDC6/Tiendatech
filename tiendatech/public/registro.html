@@ -26,15 +26,28 @@
         <form id="form-registro">
             <div class="field"><label>Nombre completo</label><input type="text" id="nombre" required autocomplete="name" /></div>
             <div class="field"><label>Correo electrónico</label><input type="email" id="correo" required autocomplete="email" /></div>
+
+            <div class="field">
+                <label>Contraseña (mín. 6)</label>
+                <div style="display:flex;gap:8px">
+                    <input type="password" id="password" minlength="6" required autocomplete="new-password" oninput="medirPass()" />
+                    <button type="button" class="btn btn-outline btn-sm" id="toggle-pass" aria-label="Mostrar u ocultar contraseña" data-ic="eye" data-ic-size="16"></button>
+                </div>
+                <div class="pass-meter" id="pass-meter" hidden>
+                    <div class="pm-track"><span id="pm-fill"></span></div>
+                    <span class="pm-label" id="pm-label"></span>
+                </div>
+            </div>
+
             <div class="field-row">
-                <div class="field"><label>Contraseña (mín. 6)</label>
-                    <div style="display:flex;gap:8px">
-                        <input type="password" id="password" minlength="6" required autocomplete="new-password" />
-                        <button type="button" class="btn btn-outline btn-sm" id="toggle-pass" aria-label="Mostrar u ocultar contraseña" data-ic="eye" data-ic-size="16"></button>
-                    </div>
+                <div class="field">
+                    <label>Confirmar contraseña</label>
+                    <input type="password" id="password2" required autocomplete="new-password" oninput="medirPass()" />
                 </div>
                 <div class="field"><label>Teléfono</label><input type="tel" id="telefono" autocomplete="tel" /></div>
             </div>
+            <div class="pass-match" id="pass-match" hidden></div>
+
             <div class="field"><label>Empresa (opcional)</label><input type="text" id="empresa" /></div>
             <div class="field-row">
                 <div class="field"><label>Ciudad</label><input type="text" id="ciudad" /></div>
@@ -72,19 +85,69 @@ document.getElementById('toggle-pass').addEventListener('click', () => {
     i.type = i.type === 'password' ? 'text' : 'password';
 });
 
+// --- Medidor de seguridad de contraseña ---
+const NIVELES_PASS = [
+    { label: 'Muy débil', color: 'var(--danger)',  pct: 20 },
+    { label: 'Débil',     color: 'var(--danger)',  pct: 40 },
+    { label: 'Regular',   color: 'var(--warning)', pct: 60 },
+    { label: 'Buena',     color: '#8FBF4D',        pct: 80 },
+    { label: 'Fuerte',    color: 'var(--success)', pct: 100 },
+];
+function fuerzaPassword(pw) {
+    if (!pw) return 0;
+    let s = 0;
+    if (pw.length >= 6) s++;
+    if (pw.length >= 10) s++;
+    if (/[a-z]/.test(pw) && /[A-Z]/.test(pw)) s++;
+    if (/\d/.test(pw)) s++;
+    if (/[^A-Za-z0-9]/.test(pw)) s++;
+    if (pw.length < 6) s = Math.min(s, 1);
+    return Math.min(s, 4);
+}
+function medirPass() {
+    const pw = document.getElementById('password').value;
+    const pw2 = document.getElementById('password2').value;
+    const meter = document.getElementById('pass-meter');
+    const fill = document.getElementById('pm-fill');
+    const label = document.getElementById('pm-label');
+    const match = document.getElementById('pass-match');
+
+    if (!pw) { meter.hidden = true; } else {
+        meter.hidden = false;
+        const n = NIVELES_PASS[fuerzaPassword(pw)];
+        fill.style.width = n.pct + '%';
+        fill.style.background = n.color;
+        label.textContent = n.label;
+        label.style.color = n.color;
+    }
+
+    if (!pw2) { match.hidden = true; } else {
+        match.hidden = false;
+        const ok = pw === pw2;
+        match.textContent = ok ? 'Las contraseñas coinciden.' : 'Las contraseñas no coinciden.';
+        match.style.color = ok ? 'var(--success)' : 'var(--danger)';
+    }
+}
+
 document.getElementById('form-registro').addEventListener('submit', async (e) => {
     e.preventDefault();
+    const password = document.getElementById('password').value;
+    const password2 = document.getElementById('password2').value;
+    const errorBox = document.getElementById('registro-error');
+    errorBox.style.display = 'none';
+
+    if (password.length < 6) { errorBox.textContent = 'La contraseña debe tener al menos 6 caracteres.'; errorBox.style.display = 'block'; return; }
+    if (password !== password2) { errorBox.textContent = 'Las contraseñas no coinciden.'; errorBox.style.display = 'block'; return; }
+
     const body = {
         nombre: document.getElementById('nombre').value,
         correo: document.getElementById('correo').value,
-        password: document.getElementById('password').value,
+        password,
         telefono: document.getElementById('telefono').value,
         empresa: document.getElementById('empresa').value,
         ciudad: document.getElementById('ciudad').value,
         estado: document.getElementById('estado').value,
     };
-    const errorBox = document.getElementById('registro-error');
-    errorBox.style.display = 'none';
     try {
         const data = await api('/auth/registro-cliente', { method: 'POST', body });
         Sesion.guardarCliente(data.cliente, data.token);
