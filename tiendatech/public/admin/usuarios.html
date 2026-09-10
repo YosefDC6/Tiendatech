@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Equipo · Admin TiendaTech</title>
+<title>Cuentas y equipo · Admin TiendaTech</title>
 <link rel="stylesheet" href="/css/style.css" />
 </head>
 <body class="theme-light">
@@ -36,19 +36,30 @@ renderAdminSidebar('usuarios');
 const usuarioActual = Sesion.usuario();
 const esAdmin = usuarioActual && usuarioActual.rol === 'admin';
 document.getElementById('topbar').innerHTML = adminHeader(
-    'Equipo interno', 'Usuarios con acceso al panel: administradores y vendedores.',
-    esAdmin ? '<button class="btn btn-primary" id="btn-nuevo" onclick="abrirNuevo()">Nuevo usuario</button>' : ''
+    'Cuentas y equipo',
+    'Da de alta cuentas de cliente o de personal interno (administrador, vendedor, soporte, almacén).',
+    esAdmin ? '<button class="btn btn-primary" onclick="abrirNueva()">Nueva cuenta</button>' : ''
 );
+if (!esAdmin) {
+    document.querySelector('.admin-main').insertAdjacentHTML('beforeend',
+        '<p style="color:var(--text-muted);font-size:.88rem;margin-top:10px">Solo un administrador puede crear o modificar cuentas.</p>');
+}
+
+let ROLES = [];
 
 async function cargarUsuarios() {
-    const usuarios = await api('/admin/usuarios');
+    const [usuarios, roles] = await Promise.all([
+        api('/admin/usuarios'),
+        api('/admin/roles').catch(() => []),
+    ]);
+    ROLES = roles;
     document.getElementById('tabla-usuarios').innerHTML = usuarios.map((u) => `
         <tr>
             <td class="mono">${u.id}</td>
             <td>${u.nombre}</td>
             <td>${u.email}</td>
             <td>${u.telefono || '—'}</td>
-            <td><span class="tag" style="text-transform:capitalize">${u.rol}</span></td>
+            <td><span class="tag">${(window.ROL_LABEL && ROL_LABEL[u.rol]) || u.rol}</span></td>
             <td>${u.activo
                 ? '<span class="tag" style="color:var(--success);border-color:var(--success)">Activo</span>'
                 : '<span class="tag" style="color:var(--danger);border-color:var(--danger)">Inactivo</span>'}</td>
@@ -57,39 +68,91 @@ async function cargarUsuarios() {
     `).join('');
 }
 
-function abrirNuevo() {
+function cerrarModal() { document.getElementById('modal-usuario').classList.remove('open'); }
+
+function abrirNueva() {
+    const opciones = [
+        '<option value="cliente">Cliente (tienda)</option>',
+        ...ROLES.map((r) => `<option value="int:${r.clave}">${r.nombre} (equipo interno)</option>`),
+    ].join('');
     document.getElementById('modal-usuario-body').innerHTML = `
-        <button class="modal-close" onclick="document.getElementById('modal-usuario').classList.remove('open')">${icon('x', 18)}</button>
-        <h3>Nuevo usuario interno</h3>
-        <div class="field"><label>Nombre completo</label><input id="u-nombre" /></div>
-        <div class="field"><label>Email</label><input type="email" id="u-email" /></div>
-        <div class="field-row">
-            <div class="field"><label>Contraseña</label><input type="password" id="u-password" minlength="6" /></div>
-            <div class="field"><label>Teléfono</label><input id="u-telefono" /></div>
+        <button class="modal-close" onclick="cerrarModal()">${icon('x', 18)}</button>
+        <h3>Nueva cuenta</h3>
+        <div class="field">
+            <label>Tipo de cuenta</label>
+            <select id="tipo" onchange="pintarCampos()">${opciones}</select>
+            <span id="tipo-desc" style="font-size:.8rem;color:var(--text-muted)"></span>
         </div>
-        <div class="field"><label>Rol</label>
-            <select id="u-rol"><option value="vendedor">Vendedor</option><option value="admin">Administrador</option></select>
-        </div>
-        <div id="u-error" style="color:var(--danger);font-size:.85rem;margin-bottom:10px;display:none"></div>
-        <button class="btn btn-primary" style="width:100%" onclick="guardarUsuario()">Crear usuario</button>
+        <div id="campos"></div>
+        <div id="u-error" style="color:var(--danger);font-size:.85rem;margin:4px 0 10px;display:none"></div>
+        <button class="btn btn-primary" style="width:100%" onclick="guardar()">Crear cuenta</button>
     `;
     document.getElementById('modal-usuario').classList.add('open');
+    pintarCampos();
 }
 
-async function guardarUsuario() {
-    const body = {
-        nombre: document.getElementById('u-nombre').value.trim(),
-        email: document.getElementById('u-email').value.trim(),
-        password: document.getElementById('u-password').value,
-        telefono: document.getElementById('u-telefono').value.trim(),
-        rol: document.getElementById('u-rol').value,
-    };
+function pintarCampos() {
+    const tipo = document.getElementById('tipo').value;
+    const desc = document.getElementById('tipo-desc');
+    const cont = document.getElementById('campos');
+
+    if (tipo === 'cliente') {
+        desc.textContent = 'Cuenta para comprar en la tienda. Aparece en Clientes, no en esta tabla.';
+        cont.innerHTML = `
+            <div class="field"><label>Nombre completo</label><input id="f-nombre" /></div>
+            <div class="field"><label>Correo electrónico</label><input type="email" id="f-correo" /></div>
+            <div class="field-row">
+                <div class="field"><label>Contraseña (mín. 6)</label><input type="password" id="f-pass" minlength="6" /></div>
+                <div class="field"><label>Teléfono</label><input id="f-tel" /></div>
+            </div>
+            <div class="field"><label>Empresa (opcional)</label><input id="f-empresa" /></div>
+            <div class="field-row">
+                <div class="field"><label>Ciudad</label><input id="f-ciudad" /></div>
+                <div class="field"><label>Estado</label><input id="f-estado" /></div>
+            </div>`;
+    } else {
+        const clave = tipo.slice(4);
+        const r = ROLES.find((x) => x.clave === clave);
+        desc.textContent = r ? r.descripcion : 'Cuenta con acceso al panel interno.';
+        cont.innerHTML = `
+            <div class="field"><label>Nombre completo</label><input id="f-nombre" /></div>
+            <div class="field"><label>Email</label><input type="email" id="f-correo" /></div>
+            <div class="field-row">
+                <div class="field"><label>Contraseña (mín. 6)</label><input type="password" id="f-pass" minlength="6" /></div>
+                <div class="field"><label>Teléfono</label><input id="f-tel" /></div>
+            </div>`;
+    }
+}
+
+async function guardar() {
+    const tipo = document.getElementById('tipo').value;
     const err = document.getElementById('u-error');
     err.style.display = 'none';
+    const g = (id) => (document.getElementById(id) ? document.getElementById(id).value.trim() : '');
+    const nombre = g('f-nombre'), correo = g('f-correo'), password = document.getElementById('f-pass').value, telefono = g('f-tel');
+
+    if (!nombre || !correo || !password) { err.textContent = 'Nombre, correo y contraseña son obligatorios.'; err.style.display = 'block'; return; }
+    if (password.length < 6) { err.textContent = 'La contraseña debe tener al menos 6 caracteres.'; err.style.display = 'block'; return; }
+
     try {
-        await api('/admin/usuarios', { method: 'POST', body });
-        document.getElementById('modal-usuario').classList.remove('open');
-        cargarUsuarios();
+        if (tipo === 'cliente') {
+            const r = await api('/admin/clientes', { method: 'POST', body: {
+                nombre, correo, password, telefono,
+                empresa: g('f-empresa'), ciudad: g('f-ciudad'), estado: g('f-estado'),
+            }});
+            cerrarModal();
+            toast('Cliente creado', 'ok');
+            if (await confirmar('Cliente creado. ¿Abrir su ficha ahora?', { okText: 'Abrir ficha' })) {
+                location.href = '/admin/cliente.html?id=' + r.cliente.id;
+            }
+        } else {
+            await api('/admin/usuarios', { method: 'POST', body: {
+                nombre, email: correo, password, telefono, rol: tipo.slice(4),
+            }});
+            cerrarModal();
+            toast('Cuenta interna creada', 'ok');
+            cargarUsuarios();
+        }
     } catch (e) {
         err.textContent = e.message;
         err.style.display = 'block';

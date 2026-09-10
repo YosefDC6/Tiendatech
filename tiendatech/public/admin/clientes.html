@@ -70,13 +70,14 @@ function formNuevo() {
     document.getElementById('modal-body').innerHTML = `
         <button class="modal-close" onclick="document.getElementById('modal').classList.remove('open')">${icon('x', 20)}</button>
         <h3>Nuevo cliente</h3>
-        <p style="font-size:.85rem;color:var(--text-muted)">Se crea con una contraseña temporal; el cliente la cambia al ingresar.</p>
         <div class="field"><label>Nombre completo</label><input id="n-nombre" /></div>
         <div class="field"><label>Correo</label><input type="email" id="n-correo" /></div>
         <div class="field-row">
+            <div class="field"><label>Contraseña (mín. 6)</label><input type="password" id="n-pass" minlength="6" value="temporal123" /></div>
             <div class="field"><label>Teléfono</label><input id="n-tel" /></div>
-            <div class="field"><label>Empresa</label><input id="n-empresa" /></div>
         </div>
+        <div class="field"><label>Empresa</label><input id="n-empresa" /></div>
+        <p style="font-size:.8rem;color:var(--text-muted)">Puedes dejar la contraseña temporal; el cliente la cambia al ingresar.</p>
         <div id="n-err" style="color:var(--danger);font-size:.85rem;margin-bottom:10px;display:none"></div>
         <button class="btn btn-primary" style="width:100%" onclick="crearCliente()">Crear cliente</button>
     `;
@@ -85,8 +86,8 @@ function formNuevo() {
 async function crearCliente() {
     const err = document.getElementById('n-err'); err.style.display = 'none';
     try {
-        const r = await api('/auth/registro-cliente', { method: 'POST', body: {
-            nombre: v('n-nombre'), correo: v('n-correo'), password: 'temporal123',
+        const r = await api('/admin/clientes', { method: 'POST', body: {
+            nombre: v('n-nombre'), correo: v('n-correo'), password: document.getElementById('n-pass').value,
             telefono: v('n-tel'), empresa: v('n-empresa'),
         }});
         document.getElementById('modal').classList.remove('open');

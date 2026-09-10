@@ -5,11 +5,12 @@
 ===============================================================================
 
 Este documento explica, seccion por seccion, que hace cada parte del sistema
-para tres perfiles:
+para estos perfiles:
 
    - CLIENTE   : la persona que compra en la tienda en linea.
    - ADMIN     : administrador del negocio, acceso total al panel.
-   - VENDEDOR  : personal interno, acceso al panel salvo la gestion de usuarios.
+   - VENDEDOR / SOPORTE / ALMACEN : personal interno con un menu recortado
+                 segun su rol (ver seccion 5).
 
 Si eres un admin nuevo, lee las secciones 1, 2, 4 y 6. El resto sirve de
 consulta.
@@ -55,25 +56,35 @@ Direcciones
  2. ROLES, ACCESOS Y CUENTAS DE PRUEBA
 ===============================================================================
 
+Todas las cuentas (cliente o internas) las puede dar de alta un ADMIN desde
+   Panel -> "Cuentas y equipo" -> "Nueva cuenta"  (elige el Tipo).
+El cliente además puede registrarse solo desde la tienda.
+
 CLIENTE
-   - Se registra solo desde la tienda (boton "Crear cuenta").
-   - Solo ve y edita SUS datos, SUS pedidos, SU carrito, SUS puntos, etc.
-   - Nunca puede entrar al panel interno.
+   - Compra en la tienda. Solo ve y edita SUS datos, pedidos, carrito, puntos.
+   - Nunca entra al panel interno.
 
-VENDEDOR
-   - Cuenta creada por un admin desde el panel (seccion Equipo).
-   - Entra por /admin/login.html. Ve todo el CRM y la tienda EXCEPTO:
-        * la seccion "Equipo" (alta/baja de usuarios internos) queda oculta.
-   - Puede registrar interacciones, atender tickets, cambiar etapas de
-     cliente, actualizar pedidos e inventario.
+ROLES INTERNOS (entran por /admin/login.html; el menu se adapta al rol)
+   - ADMINISTRADOR : acceso total, incluida la gestion de cuentas y equipo.
+   - VENDEDOR      : todo el CRM y la tienda; NO gestiona cuentas.
+   - SOPORTE       : Dashboard, Clientes, Interacciones, Evaluaciones,
+                     Soporte, Reportes, Mi actividad, Configuracion.
+   - ALMACEN       : Dashboard, Pedidos, Inventario, Analitica chatbot,
+                     Mi actividad, Configuracion.
+   El menu lateral solo muestra las secciones permitidas para ese rol, y si
+   alguien abre por URL una seccion que no le toca, se le manda al Dashboard.
 
-ADMIN
-   - Acceso total al panel, incluida la gestion de usuarios internos.
+   Para AGREGAR un rol nuevo hay que tocar 3 lugares:
+     1. db/database.sql        -> CHECK (rol IN (...)) de la tabla usuarios
+     2. server.js              -> objeto ROLES_INTERNOS
+     3. admin/js/admin-layout.js -> objeto PERMISOS (que secciones ve)
 
 Cuentas de prueba (tras cargar db/database.sql)
    Panel interno:
-      admin@tiendatech.mx           / admin123        (administrador)
-      laura.vendedor@tiendatech.mx  / vendedor123     (vendedor)
+      admin@tiendatech.mx           / admin123      (administrador)
+      laura.vendedor@tiendatech.mx  / vendedor123   (vendedor)
+      ruben.soporte@tiendatech.mx   / soporte123    (soporte)
+      paola.almacen@tiendatech.mx   / almacen123    (almacen)
    Tienda (clientes), todas con password  demo123 :
       mariana@correo.com   (nivel Oro, con pedidos y puntos)
       diego@correo.com     (nivel Oro)
@@ -291,10 +302,19 @@ Cada pantalla tiene un encabezado con titulo y, si aplica, un boton de accion.
    - Interacciones que TU (el usuario interno con la sesion activa) has
      registrado.
 
-4.12 EQUIPO  (admin/usuarios.html)  [CUENTA]  -- solo ADMIN
-   - Usuarios internos con acceso al panel: administradores y vendedores.
-   - "Nuevo usuario": nombre, email, contrasena, telefono y rol.
-   - A un vendedor esta seccion no le aparece en el menu.
+4.12 CUENTAS Y EQUIPO  (admin/usuarios.html)  [CUENTA]  -- solo ADMIN
+   - Tabla con el personal interno (administradores, vendedores, soporte,
+     almacen) y su estado.
+   - "Nueva cuenta": primero eliges el TIPO y el formulario se adapta:
+        * Cliente          -> nombre, correo, contrasena, telefono, empresa,
+                              ciudad, estado. Se crea con su codigo de socio
+                              y aparece en la seccion Clientes (no en esta
+                              tabla). Ofrece abrir su ficha al terminar.
+        * Rol interno       -> nombre, email, contrasena, telefono. El rol es
+          (Admin/Vendedor/    el tipo elegido.
+           Soporte/Almacen)
+   - Tambien puedes crear un cliente desde Clientes -> "Nuevo cliente".
+   - A los roles que no son admin, esta seccion no les aparece en el menu.
 
 4.13 CONFIGURACION  (admin/configuracion.html)  [CUENTA]
    - Apariencia: elegir el tema de color de toda la plataforma.
@@ -305,20 +325,34 @@ Cada pantalla tiene un encabezado con titulo y, si aplica, un boton de accion.
 
 
 ===============================================================================
- 5. LADO VENDEDOR  -  QUE CAMBIA RESPECTO AL ADMIN
+ 5. ROLES INTERNOS  -  QUE VE Y HACE CADA UNO
 ===============================================================================
 
-El vendedor entra por la misma pantalla (/admin/login.html) y ve el mismo
-panel, con una sola diferencia visible: la seccion "Equipo" (4.12) NO aparece
-en su menu y no puede crear ni editar usuarios internos.
+Todos entran por /admin/login.html. El menu lateral se arma segun el rol.
 
-Flujo tipico de un vendedor
-   1. Dashboard: revisar clientes en riesgo y tickets activos.
+VENDEDOR
+   Ve todo menos "Cuentas y equipo". Flujo tipico:
+   1. Dashboard: clientes en riesgo y tickets activos.
    2. Clientes: buscar al cliente y abrir su ficha.
    3. Registrar la interaccion (llamada/correo/reunion) con lo acordado.
-   4. Si hay una queja o duda formal, atender el ticket en Soporte.
+   4. Atender tickets en Soporte si hay una queja formal.
    5. Actualizar el estado del pedido en Pedidos cuando avance el envio.
    6. Ajustar stock en Inventario si se recibe mercancia.
+
+SOPORTE
+   Ve: Dashboard, Clientes, Interacciones, Evaluaciones, Soporte, Reportes,
+   Mi actividad, Configuracion. No ve Pedidos, Inventario ni Cuentas.
+   Flujo tipico: revisar la cola de tickets, responder al cliente, cambiar
+   estado/prioridad, y dejar registrada la interaccion en la ficha.
+
+ALMACEN
+   Ve: Dashboard, Pedidos, Inventario, Analitica chatbot, Mi actividad,
+   Configuracion. No ve Clientes, Interacciones, Soporte ni Cuentas.
+   Flujo tipico: procesar pedidos (confirmado -> procesando -> enviado ->
+   entregado), registrar entradas de stock y vigilar el stock critico.
+
+ADMINISTRADOR
+   Ve todo, incluido "Cuentas y equipo" (alta de cuentas y roles).
 
 
 ===============================================================================
@@ -480,12 +514,20 @@ R: Es correcto: la compra requiere una cuenta de cliente. Tras iniciar
    sesion vuelve solo al carrito.
 
 P: Un cliente no puede entrar al panel.
-R: Es correcto. El panel solo acepta usuarios internos (admin/vendedor).
+R: Es correcto. El panel solo acepta usuarios internos
+   (admin/vendedor/soporte/almacen).
 
-P: Como doy de alta a un vendedor nuevo?
-R: Con una cuenta de admin: panel -> Equipo -> "Nuevo usuario", rol
-   "Vendedor". Definele una contrasena y comunicasela. El alta, baja y
-   edicion de usuarios internos se hace siempre desde esa seccion.
+P: Como doy de alta una cuenta nueva (cliente o de personal)?
+R: Con una cuenta de admin: panel -> "Cuentas y equipo" -> "Nueva cuenta".
+   Elige el Tipo (Cliente o un rol interno), llena los campos, define una
+   contrasena y comunicasela. Un cliente tambien puede registrarse solo
+   desde la tienda.
+
+P: Necesito un rol distinto a los que hay.
+R: Se agrega en 3 lugares: el CHECK de la tabla usuarios (db/database.sql),
+   el objeto ROLES_INTERNOS en server.js y el objeto PERMISOS en
+   admin/js/admin-layout.js (para decir que secciones ve). Recarga
+   database.sql y reinicia.
 
 P: Como reinicio los datos de ejemplo?
 R: Vuelve a ejecutar  psql -U postgres -d tiendatech -f db/database.sql .

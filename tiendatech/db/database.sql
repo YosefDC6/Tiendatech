@@ -58,8 +58,10 @@ CREATE TABLE usuarios (
     email               VARCHAR(150) UNIQUE NOT NULL,
     password_hash       VARCHAR(200) NOT NULL,
     telefono            VARCHAR(30),
+    -- Roles internos. Para agregar uno nuevo: añádelo aquí y en
+    -- ROLES_INTERNOS (server.js) y PERMISOS (admin/js/admin-layout.js).
     rol                 VARCHAR(20) NOT NULL DEFAULT 'vendedor'
-                         CHECK (rol IN ('admin','vendedor')),
+                         CHECK (rol IN ('admin','vendedor','soporte','almacen')),
     activo              BOOLEAN DEFAULT TRUE,
     ultimo_login        TIMESTAMP,
     fecha_creacion      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -456,7 +458,11 @@ INSERT INTO usuarios (nombre, email, password_hash, telefono, rol, activo) VALUE
  ('Admin TiendaTech', 'admin@tiendatech.mx',
   crypt('admin123', gen_salt('bf', 10)), '555-000-0001', 'admin', true),
  ('Laura Méndez', 'laura.vendedor@tiendatech.mx',
-  crypt('vendedor123', gen_salt('bf', 10)), '555-000-0002', 'vendedor', true);
+  crypt('vendedor123', gen_salt('bf', 10)), '555-000-0002', 'vendedor', true),
+ ('Rubén Soto', 'ruben.soporte@tiendatech.mx',
+  crypt('soporte123', gen_salt('bf', 10)), '555-000-0003', 'soporte', true),
+ ('Paola Nieto', 'paola.almacen@tiendatech.mx',
+  crypt('almacen123', gen_salt('bf', 10)), '555-000-0004', 'almacen', true);
 
 INSERT INTO proveedores (nombre, contacto, email, telefono) VALUES
  ('DistriTech MX', 'Marco Aurelio', 'ventas@distritech.mx', '555-100-2000'),

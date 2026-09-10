@@ -58,6 +58,16 @@ function requireAdmin(req, res, next) {
     next();
 }
 
+// Roles internos del panel. Para agregar uno nuevo: añádelo aquí, en el
+// CHECK de la tabla usuarios (db/database.sql) y en PERMISOS
+// (public/admin/js/admin-layout.js) para que aparezca en el menú.
+const ROLES_INTERNOS = {
+    admin:    { nombre: 'Administrador', descripcion: 'Acceso total, incluida la gestión de cuentas.' },
+    vendedor: { nombre: 'Vendedor',      descripcion: 'CRM y tienda; no gestiona cuentas.' },
+    soporte:  { nombre: 'Soporte',       descripcion: 'Clientes, interacciones y tickets de soporte.' },
+    almacen:  { nombre: 'Almacén',       descripcion: 'Pedidos e inventario.' },
+};
+
 // =========================================================
 // MIDDLEWARE DE AUTENTICACIÓN (cliente / tienda)
 // Token Base64 "cliente:<id>:<timestamp>" que emiten
@@ -1040,6 +1050,32 @@ app.get('/api/admin/clientes', asyncRoute(async (req, res) => {
     res.json(result.rows);
 }));
 
+// Alta de cliente desde el panel (equivale al registro, pero lo hace un admin)
+app.post('/api/admin/clientes', requireAdmin, asyncRoute(async (req, res) => {
+    const { nombre, correo, password, telefono, empresa, ciudad, estado } = req.body;
+    if (!nombre || !correo || !password) return res.status(400).json({ message: 'Nombre, correo y contraseña son obligatorios' });
+    if (password.length < 6) return res.status(400).json({ message: 'La contraseña debe tener al menos 6 caracteres' });
+
+    const existe = await pool.query('SELECT id FROM clientes WHERE correo = $1', [correo]);
+    if (existe.rows.length > 0) return res.status(400).json({ message: 'Ese correo ya está registrado' });
+
+    const hash = await bcrypt.hash(password, 10);
+    let codigoSocio;
+    for (let i = 0; i < 5; i++) {
+        codigoSocio = generarCodigoSocio();
+        const d = await pool.query('SELECT 1 FROM clientes WHERE codigo_socio = $1', [codigoSocio]);
+        if (d.rows.length === 0) break;
+    }
+    const r = await pool.query(
+        `INSERT INTO clientes (nombre, correo, password, telefono, empresa, ciudad, estado, codigo_socio, estado_cliente, etapa_crm)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'activo','Prospecto')
+         RETURNING id, nombre, correo, telefono, empresa, ciudad, estado, etapa_crm, fecha_registro`,
+        [nombre, correo, hash, telefono || null, empresa || null, ciudad || null, estado || null, codigoSocio]
+    );
+    await pool.query('INSERT INTO metricas_clientes (cliente_id) VALUES ($1) ON CONFLICT (cliente_id) DO NOTHING', [r.rows[0].id]);
+    res.status(201).json({ message: 'Cliente creado', cliente: r.rows[0] });
+}));
+
 app.get('/api/admin/clientes/:id', asyncRoute(async (req, res) => {
     const cliente = await pool.query(
         `SELECT id, nombre, correo, telefono, empresa, direccion, ciudad, estado, codigo_postal,
@@ -1613,10 +1649,16 @@ app.get('/api/admin/usuarios', asyncRoute(async (req, res) => {
     res.json(result.rows);
 }));
 
+// Catálogo de roles internos (para poblar el selector "Nueva cuenta")
+app.get('/api/admin/roles', requireUsuario, asyncRoute(async (req, res) => {
+    res.json(Object.entries(ROLES_INTERNOS).map(([clave, r]) => ({ clave, ...r })));
+}));
+
 app.post('/api/admin/usuarios', requireAdmin, asyncRoute(async (req, res) => {
     const { nombre, email, password, telefono, rol, activo } = req.body;
     if (!nombre || !email || !password) return res.status(400).json({ message: 'Nombre, email y contraseña son obligatorios' });
     if (password.length < 6) return res.status(400).json({ message: 'La contraseña debe tener al menos 6 caracteres' });
+    if (!ROLES_INTERNOS[rol]) return res.status(400).json({ message: 'Rol no válido' });
     const existe = await pool.query('SELECT id FROM usuarios WHERE email = $1', [email]);
     if (existe.rows.length > 0) return res.status(400).json({ message: 'El email ya está registrado' });
 
